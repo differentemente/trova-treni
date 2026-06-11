@@ -1,0 +1,293 @@
+// netlify/functions/stato-treno.js
+// Stato treno in tempo reale via ViaggiaTreno (andamentoTreno).
+//
+// GET /api/stato-treno?numero=140&origine=VERONA PORTA NUOVA
+//     [&destinazione=MILANO CENTRALE] [&partenza=2026-06-11T17:32:00+02:00]
+//
+// "origine"/"destinazione" sono i NOMI stazione della soluzione LeFrecce;
+// "partenza" è l'orario ISO di partenza del treno (per disambiguare i numeri
+// treno duplicati: lo stesso numero può identificare treni diversi in Italia).
+//
+// Flusso:
+//  1) cercaNumeroTrenoTrenoAutocomplete/{numero} -> N candidati (codiceS + ts mezzanotte)
+//  2) per ogni candidato scarico andamentoTreno e SCELGO quello la cui
+//     origine/destinazione/ora di partenza combaciano con la soluzione.
+//     Niente più fallback cieco sul primo candidato.
+
+const VT = 'http://www.viaggiatreno.it/infomobilita/resteasy/viaggiatreno'
+
+const UA =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36'
+
+export async function handler(event) {
+  const p = event.queryStringParameters || {}
+  const numero = (p.numero || '').trim()
+  const origine = (p.origine || '').trim()
+  const destinazione = (p.destinazione || '').trim()
+  const partenzaISO = (p.partenza || '').trim()
+
+  if (!numero) return json(400, { disponibile: false, errore: 'numero treno mancante' })
+
+  try {
+    // --- Step 1: lista candidati per quel numero ---
+    const autoUrl = `${VT}/cercaNumeroTrenoTrenoAutocomplete/${encodeURIComponent(numero)}`
+    const autoRes = await fetch(autoUrl, { headers: { 'User-Agent': UA } })
+    const autoText = await autoRes.text()
+
+    const candidati = parseAutocomplete(autoText) // [{ nome, codice, ts }]
+    if (candidati.length === 0) {
+      return json(200, { disponibile: false, motivo: 'treno non tracciato da ViaggiaTreno' })
+    }
+
+    // minuti dopo mezzanotte attesi per la partenza (per confronto orario)
+    const minutiAttesi = minutiDaISO(partenzaISO)
+
+    // --- Step 2: scarico l'andamento dei candidati e scelgo il migliore ---
+    const ordinati = ordinaPerOrigine(candidati, origine)
+
+    let migliore = null
+    let migliorPunteggio = -1
+    let almenoUnoConDati = false
+
+    for (const c of ordinati.slice(0, 8)) {
+      const d = await scaricaAndamento(c.codice, numero, c.ts)
+      if (!d) continue // 204/vuoto: questo candidato non ha dati
+      almenoUnoConDati = true
+
+      const punteggio = valuta(d, origine, destinazione, minutiAttesi)
+      if (punteggio > migliorPunteggio) {
+        migliorPunteggio = punteggio
+        migliore = d
+      }
+      // match perfetto (origine + destinazione + orario): mi fermo subito
+      if (punteggio >= 3) break
+    }
+
+    // Nessun candidato con dati = il treno non è proprio tracciato da ViaggiaTreno
+    // (tipico di alcuni Frecciarossa/AV: l'endpoint risponde 204 No Content).
+    if (!almenoUnoConDati || !migliore) {
+      return json(200, {
+        disponibile: false,
+        motivo: 'ViaggiaTreno non fornisce il tempo reale per questo treno',
+      })
+    }
+
+    // A questo punto un treno l'ho identificato. Non rifiuto più:
+    // se era l'unico candidato non c'è ambiguità, se erano molti ho preso il
+    // migliore per origine/destinazione/orario. Mostro comunque la tratta.
+    return componiRisposta(migliore, origine, destinazione)
+  } catch (e) {
+    return json(200, { disponibile: false, motivo: 'errore di rete', errore: e.message })
+  }
+}
+
+async function scaricaAndamento(codice, numero, ts) {
+  try {
+    const url = `${VT}/andamentoTreno/${codice}/${encodeURIComponent(numero)}/${ts}`
+    const res = await fetch(url, { headers: { 'User-Agent': UA } })
+    // 204 = ViaggiaTreno non ha dati per questo treno (tipico AV)
+    if (res.status === 204) return null
+    const text = await res.text()
+    if (!text || text.trim() === '') return null
+    return JSON.parse(text)
+  } catch {
+    return null
+  }
+}
+
+// Punteggio di corrispondenza tra l'andamento e la soluzione cercata.
+// +1 origine, +1 destinazione, +1 orario di partenza vicino (<= 4 min)
+function valuta(d, origine, destinazione, minutiAttesi) {
+  let s = 0
+  if (origine && simili(d.origine, origine)) s++
+  if (destinazione && simili(d.destinazione, destinazione)) s++
+  if (minutiAttesi != null) {
+    const partTeo = orarioPartenzaTeoricoMinuti(d)
+    if (partTeo != null && Math.abs(partTeo - minutiAttesi) <= 4) s++
+  }
+  return s
+}
+
+function componiRisposta(d, origine, destinazione) {
+  if (!d || !Array.isArray(d.fermate) || d.fermate.length === 0) {
+    const soppresso = d?.tipoTreno === 'ST' || d?.provvedimento === 1
+    return json(200, {
+      disponibile: false,
+      soppresso,
+      motivo: soppresso ? 'treno soppresso' : 'nessun dato disponibile',
+    })
+  }
+
+  // Treno soppresso interamente
+  if (d.tipoTreno === 'ST' || d.provvedimento === 1) {
+    return json(200, { disponibile: false, soppresso: true, motivo: 'treno soppresso' })
+  }
+
+  const nonPartito = d.oraUltimoRilevamento == null || d.stazioneUltimoRilevamento === '--'
+  const ritardoMin = typeof d.ritardo === 'number' ? d.ritardo : 0
+
+  let stato
+  if (nonPartito) stato = 'non_partito'
+  else if (ritardoMin <= 0) stato = 'in_orario'
+  else stato = 'ritardo'
+
+  let fermateComplete = d.fermate.map((f) => {
+    const transitata = f.partenzaReale != null || f.arrivoReale != null
+    const binEff =
+      pick(f.binarioEffettivoArrivoDescrizione) || pick(f.binarioEffettivoPartenzaDescrizione)
+    const binProg =
+      pick(f.binarioProgrammatoArrivoDescrizione) ||
+      pick(f.binarioProgrammatoPartenzaDescrizione)
+    return {
+      nome: f.stazione,
+      teoricoArrivo: f.arrivo_teorico ?? null,
+      effettivoArrivo: f.arrivoReale ?? null,
+      teoricoPartenza: f.partenza_teorica ?? null,
+      effettivoPartenza: f.partenzaReale ?? null,
+      ritardo: typeof f.ritardo === 'number' ? f.ritardo : null,
+      binario: binEff || binProg || null,
+      binarioConfermato: !!binEff,
+      soppressa: f.actualFermataType === 3,
+      transitata,
+      tipo: f.tipoFermata,
+    }
+  })
+
+  let fermate = fermateComplete
+
+  // --- Taglio al segmento richiesto: da "origine" a "destinazione" ---
+  const iOrig = origine ? fermate.findIndex((f) => simili(f.nome, origine)) : 0
+  const iDest = destinazione
+    ? fermate.findIndex((f, idx) => idx >= (iOrig >= 0 ? iOrig : 0) && simili(f.nome, destinazione))
+    : fermate.length - 1
+
+  let tagliata = false
+  if (iOrig >= 0 && iDest >= 0 && iDest >= iOrig) {
+    fermate = fermate.slice(iOrig, iDest + 1)
+    tagliata = true
+  }
+
+  // Cancellazione DENTRO il segmento che interessa all'utente
+  const cancellataSulSegmento = fermate.some((f) => f.soppressa)
+
+  // Ricalcolo "transitata" e indice attuale solo sul segmento
+  const partenzaSegmento = fermate[0]
+  const segmentoNonPartito =
+    !partenzaSegmento ||
+    (partenzaSegmento.effettivoPartenza == null && partenzaSegmento.effettivoArrivo == null)
+
+  let statoSegmento = stato
+  if (cancellataSulSegmento) statoSegmento = 'cancellato'
+  else if (segmentoNonPartito && stato !== 'ritardo') statoSegmento = 'non_partito'
+
+  return json(200, {
+    disponibile: true,
+    soppresso: false,
+    cancellatoSulSegmento: cancellataSulSegmento,
+    stato: statoSegmento,
+    ritardoMin,
+    ultimoRilevamento: nonPartito ? null : d.stazioneUltimoRilevamento,
+    oraUltimoRilevamento: nonPartito ? null : d.oraUltimoRilevamento,
+    partenza: fermate[0]?.nome ?? d.origine,
+    arrivo: fermate[fermate.length - 1]?.nome ?? d.destinazione,
+    fermate,
+    // tratta intera (per il pop-up "percorso completo")
+    fermateComplete,
+    origineTreno: d.origine,
+    destinazioneTreno: d.destinazione,
+  })
+}
+
+// ---- parsing & utility ----
+
+// Righe: "140 - VERONA P. N.|140-S02430-1749592800000"
+function parseAutocomplete(text) {
+  const out = []
+  for (const line of String(text).split('\n')) {
+    const t = line.trim()
+    if (!t) continue
+    const [label, payload] = t.split('|')
+    if (!payload) continue
+    const parts = payload.split('-')
+    if (parts.length < 3) continue
+    const codice = parts[1]
+    const ts = parts[2]
+    const nome = (label.split(' - ')[1] || '').trim()
+    out.push({ nome, codice, ts })
+  }
+  return out
+}
+
+function ordinaPerOrigine(candidati, origine) {
+  if (!origine) return candidati
+  return [...candidati].sort(
+    (a, b) => puntoNome(b.nome, origine) - puntoNome(a.nome, origine)
+  )
+}
+
+function puntoNome(nome, target) {
+  if (simili(nome, target)) return 2
+  const a = norm(nome)
+  const b = norm(target)
+  if (a && b && (a.includes(b) || b.includes(a))) return 1
+  return 0
+}
+
+// Confronto nomi stazione tollerante alle abbreviazioni ViaggiaTreno
+// es. "VERONA PORTA NUOVA" ~ "VERONA P. N." ; "MILANO CENTRALE" ~ "MILANO C.LE"
+function simili(a, b) {
+  if (!a || !b) return false
+  const na = norm(a)
+  const nb = norm(b)
+  if (na === nb) return true
+  // confronto per iniziali parole: VERONAPN vs VERONAPORTANUOVA
+  const ia = iniziali(a)
+  const ib = iniziali(b)
+  if (ia && ib && (ia === ib)) return true
+  // una contenuta nell'altra dopo aver tolto puntini/spazi
+  return na.includes(nb) || nb.includes(na)
+}
+
+function norm(s) {
+  return String(s).toUpperCase().replace(/[^A-Z0-9]/g, '')
+}
+
+// "VERONA PORTA NUOVA" -> "VPN" ; usa la prima lettera di ogni parola >1 char
+function iniziali(s) {
+  return String(s)
+    .toUpperCase()
+    .split(/[\s.\-]+/)
+    .filter((w) => w.length > 0)
+    .map((w) => w[0])
+    .join('')
+}
+
+function minutiDaISO(iso) {
+  const m = String(iso).match(/T(\d{2}):(\d{2})/)
+  if (!m) return null
+  return Number(m[1]) * 60 + Number(m[2])
+}
+
+// minuti dopo mezzanotte dell'orario di partenza teorico dalla prima fermata
+function orarioPartenzaTeoricoMinuti(d) {
+  const ts = d?.fermate?.[0]?.partenza_teorica ?? d?.orarioPartenza
+  if (ts == null) return null
+  const date = new Date(Number(ts))
+  if (isNaN(date)) return null
+  return date.getHours() * 60 + date.getMinutes()
+}
+
+function pick(v) {
+  if (v == null) return null
+  const s = String(v).trim()
+  if (s === '' || s === '0' || s === '-' || s === '--') return null
+  return s
+}
+
+function json(statusCode, body) {
+  return {
+    statusCode,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  }
+}

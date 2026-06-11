@@ -1,0 +1,12 @@
+{
+  "name": "Trova Treni",
+  "short_name": "Trova Treni",
+  "description": "Un'app di Nicola Perozeni",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#faf7f0",
+  "theme_color": "#006633",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
