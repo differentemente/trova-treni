@@ -10,6 +10,7 @@ function oraTs(ts) {
 
 function etichettaStato(s) {
   if (!s?.disponibile) return { testo: 'n.d.', sotto: '', classe: 'bg-gray-100 text-gray-500' }
+  if (s.stato === 'programmato') return { testo: 'Orari', sotto: 'previsti', classe: 'bg-araldico-50 text-araldico-800' }
   if (s.stato === 'cancellato') return { testo: 'Canc.', sotto: '', classe: 'bg-red-100 text-red-800' }
   if (s.stato === 'non_partito') return { testo: 'Non', sotto: 'partito', classe: 'bg-araldico-50 text-araldico-800' }
   if (s.stato === 'in_orario') return { testo: 'In', sotto: 'orario', classe: 'bg-green-100 text-green-800' }
@@ -160,7 +161,7 @@ function PopupTratta({ titolo, fermate, onChiudi }) {
   )
 }
 
-export default function TrattaTreno({ numero, origine, destinazione, partenza }) {
+export default function TrattaTreno({ numero, origine, destinazione, partenza, futura }) {
   const [stato, setStato] = useState(null)
   const [caricamento, setCaricamento] = useState(true)
   const [popup, setPopup] = useState(false)
@@ -168,14 +169,14 @@ export default function TrattaTreno({ numero, origine, destinazione, partenza })
   useEffect(() => {
     let vivo = true
     setCaricamento(true)
-    statoTreno({ numero, origine, destinazione, partenza })
+    statoTreno({ numero, origine, destinazione, partenza, futura })
       .then((s) => vivo && setStato(s))
       .catch(() => vivo && setStato({ disponibile: false, motivo: 'errore di rete' }))
       .finally(() => vivo && setCaricamento(false))
     return () => {
       vivo = false
     }
-  }, [numero, origine, destinazione, partenza])
+  }, [numero, origine, destinazione, partenza, futura])
 
   if (caricamento) {
     return <div className="px-4 py-4 text-sm text-araldico-500">Carico stato treno…</div>
@@ -206,9 +207,11 @@ export default function TrattaTreno({ numero, origine, destinazione, partenza })
       >
         <div className="flex-1">
           <div className="text-lg font-bold leading-tight text-gray-900">
-            {stato.ultimoRilevamento || stato.partenza}
+            {stato.futura ? `${stato.partenza} → ${stato.arrivo}` : stato.ultimoRilevamento || stato.partenza}
           </div>
-          {stato.oraUltimoRilevamento ? (
+          {stato.futura ? (
+            <div className="text-sm text-gray-400">Orari previsti (treno non ancora in viaggio)</div>
+          ) : stato.oraUltimoRilevamento ? (
             <div className="text-sm text-gray-400">Ultimo rilevamento: {oraTs(stato.oraUltimoRilevamento)}</div>
           ) : (
             <div className="text-sm text-gray-400">In attesa di rilevamento</div>

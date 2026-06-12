@@ -25,8 +25,14 @@ export async function handler(event) {
   const origine = (p.origine || '').trim()
   const destinazione = (p.destinazione || '').trim()
   const partenzaISO = (p.partenza || '').trim()
+  // data target (yyyy-MM-dd): se futura, costruisco il timestamp di quel giorno
+  const dataTarget = (p.data || '').trim()
+  const futura = (p.futura || '') === '1'
 
   if (!numero) return json(400, { disponibile: false, errore: 'numero treno mancante' })
+
+  // timestamp mezzanotte della data scelta (ms) — per orari teorici futuri
+  const tsTarget = timestampMezzanotte(dataTarget)
 
   try {
     // --- Step 1: lista candidati per quel numero ---
@@ -43,7 +49,11 @@ export async function handler(event) {
     const minutiAttesi = minutiDaISO(partenzaISO)
 
     // --- Step 2: scarico l'andamento dei candidati e scelgo il migliore ---
-    const ordinati = ordinaPerOrigine(candidati, origine)
+    // Per date future uso il timestamp della data scelta al posto di quello odierno.
+    const ordinati = ordinaPerOrigine(candidati, origine).map((c) => ({
+      ...c,
+      ts: futura && tsTarget ? String(tsTarget) : c.ts,
+    }))
 
     let migliore = null
     let migliorPunteggio = -1
@@ -75,7 +85,7 @@ export async function handler(event) {
     // A questo punto un treno l'ho identificato. Non rifiuto più:
     // se era l'unico candidato non c'è ambiguità, se erano molti ho preso il
     // migliore per origine/destinazione/orario. Mostro comunque la tratta.
-    return componiRisposta(migliore, origine, destinazione)
+    return componiRisposta(migliore, origine, destinazione, futura)
   } catch (e) {
     return json(200, { disponibile: false, motivo: 'errore di rete', errore: e.message })
   }
@@ -108,7 +118,7 @@ function valuta(d, origine, destinazione, minutiAttesi) {
   return s
 }
 
-function componiRisposta(d, origine, destinazione) {
+function componiRisposta(d, origine, destinazione, futura = false) {
   if (!d || !Array.isArray(d.fermate) || d.fermate.length === 0) {
     const soppresso = d?.tipoTreno === 'ST' || d?.provvedimento === 1
     return json(200, {
@@ -124,27 +134,30 @@ function componiRisposta(d, origine, destinazione) {
   }
 
   const nonPartito = d.oraUltimoRilevamento == null || d.stazioneUltimoRilevamento === '--'
-  const ritardoMin = typeof d.ritardo === 'number' ? d.ritardo : 0
+  const ritardoMin = futura ? 0 : typeof d.ritardo === 'number' ? d.ritardo : 0
 
   let stato
-  if (nonPartito) stato = 'non_partito'
+  if (futura) stato = 'programmato'
+  else if (nonPartito) stato = 'non_partito'
   else if (ritardoMin <= 0) stato = 'in_orario'
   else stato = 'ritardo'
 
   let fermateComplete = d.fermate.map((f) => {
-    const transitata = f.partenzaReale != null || f.arrivoReale != null
-    const binEff =
-      pick(f.binarioEffettivoArrivoDescrizione) || pick(f.binarioEffettivoPartenzaDescrizione)
+    // in data futura ignoro qualsiasi dato reale: solo teorici
+    const transitata = futura ? false : f.partenzaReale != null || f.arrivoReale != null
+    const binEff = futura
+      ? null
+      : pick(f.binarioEffettivoArrivoDescrizione) || pick(f.binarioEffettivoPartenzaDescrizione)
     const binProg =
       pick(f.binarioProgrammatoArrivoDescrizione) ||
       pick(f.binarioProgrammatoPartenzaDescrizione)
     return {
       nome: f.stazione,
       teoricoArrivo: f.arrivo_teorico ?? null,
-      effettivoArrivo: f.arrivoReale ?? null,
+      effettivoArrivo: futura ? null : f.arrivoReale ?? null,
       teoricoPartenza: f.partenza_teorica ?? null,
-      effettivoPartenza: f.partenzaReale ?? null,
-      ritardo: typeof f.ritardo === 'number' ? f.ritardo : null,
+      effettivoPartenza: futura ? null : f.partenzaReale ?? null,
+      ritardo: futura ? null : typeof f.ritardo === 'number' ? f.ritardo : null,
       binario: binEff || binProg || null,
       binarioConfermato: !!binEff,
       soppressa: f.actualFermataType === 3,
@@ -156,21 +169,15 @@ function componiRisposta(d, origine, destinazione) {
   let fermate = fermateComplete
 
   // --- Proiezione del ritardo sulle fermate non ancora raggiunte ---
-  // Per ogni fermata: se è già transitata uso l'orario effettivo reale.
-  // Se non è transitata, sommo all'orario teorico il ritardo "corrente",
-  // cioè l'ultimo ritardo noto (dal treno o dall'ultima fermata transitata).
-  // Se in una fermata il ritardo si riduce/azzera, le proiezioni successive
-  // si ricalcolano sul nuovo valore.
-  {
+  // (saltata per le date future: non c'è ritardo da proiettare)
+  if (!futura) {
     let ritardoCorrente = ritardoMin
     for (const f of fermateComplete) {
       if (f.transitata) {
-        // aggiorno il ritardo corrente col ritardo reale di questa fermata
         if (typeof f.ritardo === 'number') ritardoCorrente = f.ritardo
         f.proiezioneArrivo = null
         f.proiezionePartenza = null
       } else {
-        // proietto teorico + ritardo corrente (solo se c'è ritardo da proiettare)
         f.proiezioneArrivo =
           ritardoCorrente > 0 ? sommaMinuti(f.teoricoArrivo, ritardoCorrente) : null
         f.proiezionePartenza =
@@ -201,17 +208,19 @@ function componiRisposta(d, origine, destinazione) {
     (partenzaSegmento.effettivoPartenza == null && partenzaSegmento.effettivoArrivo == null)
 
   let statoSegmento = stato
-  if (cancellataSulSegmento) statoSegmento = 'cancellato'
+  if (futura) statoSegmento = 'programmato'
+  else if (cancellataSulSegmento) statoSegmento = 'cancellato'
   else if (segmentoNonPartito && stato !== 'ritardo') statoSegmento = 'non_partito'
 
   return json(200, {
     disponibile: true,
+    futura,
     soppresso: false,
-    cancellatoSulSegmento: cancellataSulSegmento,
+    cancellatoSulSegmento: futura ? false : cancellataSulSegmento,
     stato: statoSegmento,
     ritardoMin,
-    ultimoRilevamento: nonPartito ? null : d.stazioneUltimoRilevamento,
-    oraUltimoRilevamento: nonPartito ? null : d.oraUltimoRilevamento,
+    ultimoRilevamento: futura || nonPartito ? null : d.stazioneUltimoRilevamento,
+    oraUltimoRilevamento: futura || nonPartito ? null : d.oraUltimoRilevamento,
     partenza: fermate[0]?.nome ?? d.origine,
     arrivo: fermate[fermate.length - 1]?.nome ?? d.destinazione,
     fermate,
@@ -299,6 +308,15 @@ function orarioPartenzaTeoricoMinuti(d) {
   const date = new Date(Number(ts))
   if (isNaN(date)) return null
   return date.getHours() * 60 + date.getMinutes()
+}
+
+// timestamp (ms) della mezzanotte di una data yyyy-MM-dd in ora italiana
+function timestampMezzanotte(dataISO) {
+  const m = String(dataISO).match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (!m) return null
+  // mezzanotte locale; ViaggiaTreno usa l'ora italiana
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 0, 0, 0, 0)
+  return d.getTime()
 }
 
 // Somma N minuti a un timestamp (ms) e restituisce un nuovo timestamp ms.

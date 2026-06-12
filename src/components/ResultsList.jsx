@@ -59,8 +59,8 @@ function TabTreno({ treno, dataFutura }) {
 
   const etichetta = [treno.categoria, treno.numero].filter(Boolean).join(' ') || 'Treno'
   const cancellato = stato?.soppresso || stato?.stato === 'cancellato'
-  // un treno cancellato sul segmento non si apre; in data futura non c'è dettaglio realtime
-  const apribile = !cancellato && !dataFutura
+  // cancellato sul segmento non si apre; in data futura SI apre (mostra teorici)
+  const apribile = !cancellato
 
   return (
     <div className={`overflow-hidden rounded-xl border ${cancellato ? 'border-red-200' : 'border-araldico-100'}`}>
@@ -87,6 +87,7 @@ function TabTreno({ treno, dataFutura }) {
           origine={treno.da}
           destinazione={treno.a}
           partenza={treno.partenza}
+          futura={dataFutura}
         />
       )}
     </div>
