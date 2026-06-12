@@ -1,23 +1,28 @@
 // netlify/functions/cerca-italo.js
-// Collegamenti DIRETTI Italo tra due stazioni, dal tabellone partenze pubblico
-// "Italo in viaggio" (una sola chiamata, nessun login).
+// Ricerca soluzioni Italo (orario completo) via API ufficiale del sito biglietti,
+// SENZA login. Flusso a due passi con polling:
+//  1) POST /api/v1/booking { departureStation, arrivalStation, departureDate, ... }
+//     -> { operationId, pollAfter, isCompleted }
+//  2) GET /api/v1/booking/status/{operationId} (ripetuto finché pronto)
+//     -> trips[].travelSolutions[].journeys[].segments[] con orari e numero treno
 //
-// GET /api/cerca-italo?da=Verona Porta Nuova&a=Roma Termini&quando=2026-06-12T08:30
-//
-// Flusso:
-//  1) traduco le stazioni nei codici Italo (mappatura fissa); se una non e'
-//     servita da Italo -> lista vuota.
-//  2) RicercaStazioneService sul tabellone PARTENZE dell'origine (1 chiamata).
-//  3) per ogni treno leggo InfoRoute (percorso con orari): se contiene la
-//     destinazione dopo la partenza e nella finestra di 3h -> soluzione.
+// GET /api/cerca-italo?da=Trento&a=Verona Porta Nuova&quando=2026-06-12T15:00
 
 import { codiceItalo, ITALO_NOMI } from './_italo_stazioni.js'
 
-const BASE = 'https://italoinviaggio.italotreno.it/api'
+const API = 'https://api-biglietti.italotreno.com/api/v1'
 const UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36'
+const HEADERS = {
+  Accept: 'application/json, text/plain, */*',
+  'Content-Type': 'application/json',
+  Origin: 'https://biglietti.italotreno.com',
+  Referer: 'https://biglietti.italotreno.com/',
+  'User-Agent': UA,
+}
 
-const FINESTRA_MIN = 180 // 3 ore
+const MAX_POLL = 6 // tentativi di polling
+const POLL_MS = 1200 // attesa tra un polling e l'altro
 
 export async function handler(event) {
   const p = event.queryStringParameters || {}
@@ -29,59 +34,93 @@ export async function handler(event) {
   const codA = codiceItalo(aNome)
   if (!codDa || !codA) return json(200, { soluzioni: [] })
 
+  const data = estraiData(quando) // yyyy-MM-dd
+  if (!data) return json(200, { soluzioni: [] })
   const minutiRichiesti = minutiDaISO(quando)
-  // nomi per cercare la destinazione in InfoRoute: esatti (priorità) + alias
-  const nomiEsatti = nomiDestEsatti(codA, aNome)
-  const nomiAlias = nomiDestAlias(codA)
 
   try {
-    const nomeStazione = ITALO_NOMI[codDa] || daNome
-    const url =
-      `${BASE}/RicercaStazioneService?` +
-      `CodiceStazione=${encodeURIComponent(codDa)}` +
-      `&NomeStazione=${encodeURIComponent(nomeStazione)}`
-
-    const res = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'application/json' } })
-    if (!res.ok) return json(200, { soluzioni: [] })
-    const tab = await res.json()
-
-    const partenze = tab?.ListaTreniPartenza || []
-    if (!Array.isArray(partenze) || partenze.length === 0) {
-      return json(200, { soluzioni: [] })
+    // --- 1) avvio ricerca ---
+    const body = {
+      isRoundTrip: false,
+      departureStation: codDa,
+      arrivalStation: codA,
+      departureDate: data,
+      culture: 'it-IT',
+      showPrivateOffers: false,
+      showBestPrices: true,
+      adultPassengers: 1,
+      youngPassengers: 0,
+      childPassengers: 0,
+      seniorPassengers: 0,
+      hasPet: false,
+      promoCode: '',
+      employeeOffer: null,
+      passengersAges: null,
+      portalType: 'B2C',
     }
+    const startRes = await fetch(`${API}/booking`, {
+      method: 'POST',
+      headers: HEADERS,
+      body: JSON.stringify(body),
+    })
+    if (!startRes.ok) return json(200, { soluzioni: [] })
+    const start = await startRes.json()
+    const opId = start.operationId
+    if (!opId) return json(200, { soluzioni: [] })
 
-    const soluzioni = []
-    for (const t of partenze) {
-      const numero = String(t.Numero || '').trim()
-      if (!numero) continue
-
-      // orario di partenza da questa stazione (NuovoOrario tiene conto del ritardo,
-      // ma per il teorico uso OraPassaggio)
-      const partenza = (t.OraPassaggio || t.NuovoOrario || '').trim()
-      const minPart = minutiDaOrario(partenza)
-
-      // filtro finestra 3h
-      if (minutiRichiesti != null && minPart != null) {
-        let diff = minPart - minutiRichiesti
-        if (diff < -5) diff += 1440
-        if (diff < -5 || diff > FINESTRA_MIN) continue
+    // --- 2) polling status finché ho le soluzioni ---
+    let statusData = null
+    for (let i = 0; i < MAX_POLL; i++) {
+      await sleep(i === 0 ? (start.pollAfter || POLL_MS) : POLL_MS)
+      const sRes = await fetch(`${API}/booking/status/${opId}`, { headers: HEADERS })
+      if (!sRes.ok) continue
+      const s = await sRes.json()
+      const trips = s?.trips || []
+      const haSoluzioni = trips.some((t) => (t.travelSolutions || []).length > 0)
+      if (haSoluzioni || s.isCompleted) {
+        statusData = s
+        if (haSoluzioni) break
       }
+    }
+    if (!statusData) return json(200, { soluzioni: [] })
 
-      // cerco la destinazione nel percorso (InfoRoute)
-      const arrivo = trovaArrivoInRoute(t.InfoRoute || t.Descrizione || '', nomiEsatti, nomiAlias)
-      if (!arrivo) continue
+    // --- 3) estraggo le soluzioni ---
+    const soluzioni = []
+    for (const trip of statusData.trips || []) {
+      if (trip.direction && trip.direction !== 'forward') continue
+      for (const ts of trip.travelSolutions || []) {
+        const journeys = ts.journeys || []
+        if (journeys.length === 0) continue
 
-      soluzioni.push({
-        categoria: 'Italo',
-        numero,
-        da: ITALO_NOMI[codDa] || daNome,
-        a: arrivo.nome,
-        orarioPartenza: normalizzaOra(partenza),
-        orarioArrivo: normalizzaOra(arrivo.ora),
-        ritardo: typeof t.Ritardo === 'number' ? t.Ritardo : null,
-        cambi: 0,
-        operatore: 'italo',
-      })
+        // orari complessivi: partenza del primo segmento, arrivo dell'ultimo
+        const primoSeg = journeys[0].segments?.[0]
+        const ultimoJ = journeys[journeys.length - 1]
+        const ultimoSeg = ultimoJ.segments?.[ultimoJ.segments.length - 1]
+        if (!primoSeg || !ultimoSeg) continue
+
+        const partenza = primoSeg.std // ISO
+        const arrivo = ultimoSeg.sta
+        const minPart = minutiDaISO(partenza)
+
+        // filtro: solo soluzioni a partire dall'orario richiesto (tutta la giornata dopo)
+        if (minutiRichiesti != null && minPart != null && minPart < minutiRichiesti - 5) continue
+
+        // numeri treno dei segmenti
+        const numeri = journeys
+          .flatMap((j) => (j.segments || []).map((sg) => sg.trainNumber))
+          .filter(Boolean)
+
+        soluzioni.push({
+          categoria: 'Italo',
+          numero: numeri.join('+') || '',
+          da: ITALO_NOMI[codDa] || daNome,
+          a: ITALO_NOMI[codA] || aNome,
+          orarioPartenza: partenza, // ISO, il frontend formatta
+          orarioArrivo: arrivo,
+          cambi: ts.numberOfChanges || Math.max(journeys.length - 1, 0),
+          operatore: 'italo',
+        })
+      }
     }
 
     soluzioni.sort((a, b) => (a.orarioPartenza || '').localeCompare(b.orarioPartenza || ''))
@@ -91,89 +130,19 @@ export async function handler(event) {
   }
 }
 
-// Cerca la stazione di destinazione dentro la stringa InfoRoute.
-// Formato: "Milano Rogoredo (11.23) - Roma Termini (14.30) - ..."
-// Due passate: prima cerco il nome ESATTO (es. "Roma Termini"), poi gli alias,
-// così non confondo Roma Termini con Roma Tiburtina.
-function trovaArrivoInRoute(route, nomiEsatti, nomiAlias) {
-  if (!route) return null
-  const tappe = []
-  for (const tappa of route.split(' - ')) {
-    const m = tappa.match(/^(.*?)\s*\((\d{1,2})[.:](\d{2})\)/)
-    if (!m) continue
-    tappe.push({ nome: m[1].trim(), ora: `${m[2].padStart(2, '0')}:${m[3]}` })
-  }
-  // passata 1: match esatto sul nome completo
-  for (const t of tappe) {
-    if (nomiEsatti.some((nd) => norm(t.nome) === norm(nd))) return t
-  }
-  // passata 2: match per inclusione sugli alias
-  for (const t of tappe) {
-    if (nomiAlias.some((nd) => matchNome(t.nome, nd))) return t
-  }
-  return null
-}
-
-// nomi ESATTI della destinazione (per il match prioritario, senza ambiguità)
-function nomiDestEsatti(codA, aNome) {
-  const set = new Set()
-  if (ITALO_NOMI[codA]) set.add(ITALO_NOMI[codA])
-  if (aNome) set.add(aNome)
-  // varianti di scrittura usate da Italo in InfoRoute
-  const varianti = {
-    BC_: ['Bologna centrale'],
-    AAV: ['Mediopadana R.Emilia'],
-    OUE: ['Torino Porta di Susa'],
-    VSL: ['Venezia Santa Lucia'],
-    SMN: ['Firenze Santa Maria Novella'],
-  }
-  if (varianti[codA]) varianti[codA].forEach((x) => set.add(x))
-  return [...set]
-}
-
-// alias generici (usati solo se il match esatto fallisce)
-function nomiDestAlias(codA) {
-  const extra = {
-    RMT: ['Roma Termini'],
-    RTB: ['Roma Tiburtina'],
-    NAC: ['Napoli'],
-    VPN: ['Verona Porta Nuova'],
-    DSG: ['Desenzano'],
-    BSC: ['Brescia'],
-    PD_: ['Padova'],
-    VEM: ['Venezia Mestre'],
-    TOP: ['Torino Porta Nuova'],
-  }
-  return extra[codA] || []
-}
-
-function matchNome(a, b) {
-  const na = norm(a)
-  const nb = norm(b)
-  if (!na || !nb) return false
-  return na === nb || na.includes(nb) || nb.includes(na)
-}
-
-function norm(s) {
-  return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '')
-}
-
-// "10.40" o "10:40" -> "10:40"
-function normalizzaOra(v) {
-  const m = String(v).match(/(\d{1,2})[.:](\d{2})/)
-  return m ? `${m[1].padStart(2, '0')}:${m[2]}` : v
-}
-
-function minutiDaOrario(v) {
-  const m = String(v).match(/(\d{1,2})[.:](\d{2})/)
-  if (!m) return null
-  return Number(m[1]) * 60 + Number(m[2])
+function estraiData(iso) {
+  const m = String(iso).match(/^(\d{4}-\d{2}-\d{2})/)
+  return m ? m[1] : null
 }
 
 function minutiDaISO(iso) {
   const m = String(iso).match(/T(\d{2}):(\d{2})/)
   if (!m) return null
   return Number(m[1]) * 60 + Number(m[2])
+}
+
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms))
 }
 
 function json(statusCode, body) {
