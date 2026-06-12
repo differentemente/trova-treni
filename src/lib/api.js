@@ -8,8 +8,9 @@ export async function cercaStazione(testo) {
   return data.stations // [{ id, name, multistation }]
 }
 
-export async function cercaViaggio({ da, a, quando, offset = 0 }) {
+export async function cercaViaggio({ da, a, quando, offset = 0, diretti = false }) {
   const params = new URLSearchParams({ da, a, quando, offset: String(offset) })
+  if (diretti) params.set('diretti', '1')
   const res = await fetch(`/api/cerca-viaggio?${params}`)
   if (!res.ok) throw new Error('Errore ricerca viaggio')
   const data = await res.json()

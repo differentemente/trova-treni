@@ -23,6 +23,7 @@ export default function App() {
   const [offset, setOffset] = useState(0)
   // orario della soluzione più "vecchia" mostrata, per i treni precedenti
   const [orarioPiuVecchio, setOrarioPiuVecchio] = useState(null)
+  const [dataFutura, setDataFutura] = useState(false)
 
   async function cerca(parametri) {
     setCaricamento(true)
@@ -34,6 +35,7 @@ export default function App() {
       setUltimaRicerca(parametri)
       setOffset(0)
       setOrarioPiuVecchio(parametri.quando)
+      setDataFutura(!!parametri.dataFutura)
       setCercato(true)
     } catch (e) {
       setErrore('Errore durante la ricerca. Riprova tra qualche secondo.')
@@ -114,6 +116,7 @@ export default function App() {
       <ResultsList
         soluzioni={soluzioni}
         cercato={cercato}
+        dataFutura={dataFutura}
         onAltre={altre}
         onPrecedenti={precedenti}
         caricamentoAltre={caricamentoAltre}

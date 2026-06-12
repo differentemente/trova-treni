@@ -33,14 +33,15 @@ function BadgeStato({ stato }) {
 }
 
 // Tab di un singolo treno della soluzione
-function TabTreno({ treno }) {
+function TabTreno({ treno, dataFutura }) {
   const [aperto, setAperto] = useState(false)
   const [stato, setStato] = useState(null)
 
   useEffect(() => {
     let vivo = true
-    if (!treno.numero) {
-      setStato({ disponibile: false })
+    // Data futura: niente realtime, il treno non è ancora partito.
+    if (dataFutura || !treno.numero) {
+      setStato(null)
       return
     }
     statoTreno({
@@ -54,12 +55,12 @@ function TabTreno({ treno }) {
     return () => {
       vivo = false
     }
-  }, [treno.numero, treno.da, treno.a, treno.partenza])
+  }, [treno.numero, treno.da, treno.a, treno.partenza, dataFutura])
 
   const etichetta = [treno.categoria, treno.numero].filter(Boolean).join(' ') || 'Treno'
   const cancellato = stato?.soppresso || stato?.stato === 'cancellato'
-  // un treno cancellato sul segmento non si apre
-  const apribile = !cancellato
+  // un treno cancellato sul segmento non si apre; in data futura non c'è dettaglio realtime
+  const apribile = !cancellato && !dataFutura
 
   return (
     <div className={`overflow-hidden rounded-xl border ${cancellato ? 'border-red-200' : 'border-araldico-100'}`}>
@@ -76,7 +77,7 @@ function TabTreno({ treno }) {
         <span className={`flex-1 truncate text-sm ${cancellato ? 'text-red-700 line-through' : 'text-araldico-700'}`}>
           {treno.da} ({ora(treno.partenza)}) &rarr; {treno.a} ({ora(treno.arrivo)})
         </span>
-        <BadgeStato stato={stato} />
+        {!dataFutura && <BadgeStato stato={stato} />}
         {apribile && <span className="text-araldico-300">{aperto ? '\u25B2' : '\u25BC'}</span>}
       </button>
 
@@ -92,7 +93,7 @@ function TabTreno({ treno }) {
   )
 }
 
-function Soluzione({ sol }) {
+function Soluzione({ sol, dataFutura }) {
   return (
     <div className="rounded-2xl bg-white p-4 shadow-sm border border-araldico-100">
       <div className="flex items-baseline justify-between gap-3">
@@ -108,7 +109,7 @@ function Soluzione({ sol }) {
 
       <div className="mt-3 space-y-2">
         {sol.treni.map((t, i) => (
-          <TabTreno key={i} treno={t} />
+          <TabTreno key={i} treno={t} dataFutura={dataFutura} />
         ))}
       </div>
     </div>
@@ -118,6 +119,7 @@ function Soluzione({ sol }) {
 export default function ResultsList({
   soluzioni,
   cercato,
+  dataFutura,
   onAltre,
   onPrecedenti,
   caricamentoAltre,
@@ -146,7 +148,7 @@ export default function ResultsList({
       </button>
 
       {soluzioni.map((sol, i) => (
-        <Soluzione key={i} sol={sol} />
+        <Soluzione key={i} sol={sol} dataFutura={dataFutura} />
       ))}
 
       <button

@@ -155,6 +155,30 @@ function componiRisposta(d, origine, destinazione) {
 
   let fermate = fermateComplete
 
+  // --- Proiezione del ritardo sulle fermate non ancora raggiunte ---
+  // Per ogni fermata: se è già transitata uso l'orario effettivo reale.
+  // Se non è transitata, sommo all'orario teorico il ritardo "corrente",
+  // cioè l'ultimo ritardo noto (dal treno o dall'ultima fermata transitata).
+  // Se in una fermata il ritardo si riduce/azzera, le proiezioni successive
+  // si ricalcolano sul nuovo valore.
+  {
+    let ritardoCorrente = ritardoMin
+    for (const f of fermateComplete) {
+      if (f.transitata) {
+        // aggiorno il ritardo corrente col ritardo reale di questa fermata
+        if (typeof f.ritardo === 'number') ritardoCorrente = f.ritardo
+        f.proiezioneArrivo = null
+        f.proiezionePartenza = null
+      } else {
+        // proietto teorico + ritardo corrente (solo se c'è ritardo da proiettare)
+        f.proiezioneArrivo =
+          ritardoCorrente > 0 ? sommaMinuti(f.teoricoArrivo, ritardoCorrente) : null
+        f.proiezionePartenza =
+          ritardoCorrente > 0 ? sommaMinuti(f.teoricoPartenza, ritardoCorrente) : null
+      }
+    }
+  }
+
   // --- Taglio al segmento richiesto: da "origine" a "destinazione" ---
   const iOrig = origine ? fermate.findIndex((f) => simili(f.nome, origine)) : 0
   const iDest = destinazione
@@ -275,6 +299,14 @@ function orarioPartenzaTeoricoMinuti(d) {
   const date = new Date(Number(ts))
   if (isNaN(date)) return null
   return date.getHours() * 60 + date.getMinutes()
+}
+
+// Somma N minuti a un timestamp (ms) e restituisce un nuovo timestamp ms.
+function sommaMinuti(ts, minuti) {
+  if (ts == null) return null
+  const n = Number(ts)
+  if (isNaN(n)) return null
+  return n + minuti * 60000
 }
 
 function pick(v) {

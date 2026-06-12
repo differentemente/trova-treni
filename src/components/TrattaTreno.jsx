@@ -16,13 +16,30 @@ function etichettaStato(s) {
   return { testo: `+${s.ritardoMin}`, sotto: 'Ritardo', classe: 'bg-amber-100 text-amber-800' }
 }
 
-function OrarioCoppia({ teorico, effettivo, ritardo }) {
-  let colEff = 'text-gray-900'
-  if (ritardo != null && ritardo > 0) colEff = 'text-red-600'
+// teorico (grigio sopra) / effettivo reale o proiezione ritardo (sotto)
+function OrarioCoppia({ teorico, effettivo, proiezione, ritardo }) {
+  // riga inferiore: prima l'effettivo reale; se manca, la proiezione stimata
+  let sotto = effettivo
+  let colSotto = 'text-gray-900'
+  let stimato = false
+
+  if (!effettivo && proiezione) {
+    sotto = proiezione
+    stimato = true
+    colSotto = 'text-amber-600' // proiezione: ambra
+  } else if (effettivo && ritardo != null && ritardo > 0) {
+    colSotto = 'text-red-600' // effettivo in ritardo
+  } else if (effettivo) {
+    colSotto = 'text-green-700' // effettivo in orario/anticipo
+  }
+
   return (
     <div className="text-right leading-snug">
       <div className="text-[15px] text-gray-400">{teorico || '—:—'}</div>
-      <div className={`text-[15px] font-medium ${colEff}`}>{effettivo || '—:—'}</div>
+      <div className={`text-[15px] font-medium ${colSotto}`}>
+        {sotto || '—:—'}
+        {stimato && <span className="ml-0.5 align-top text-[9px]">~</span>}
+      </div>
     </div>
   )
 }
@@ -85,10 +102,20 @@ function TabellaFermate({ fermate }) {
               <Pill testo={f.binario} confermato={f.binarioConfermato} />
             </span>
             <span className="justify-self-end">
-              <OrarioCoppia teorico={oraTs(f.teoricoArrivo)} effettivo={oraTs(f.effettivoArrivo)} ritardo={f.ritardo} />
+              <OrarioCoppia
+                teorico={oraTs(f.teoricoArrivo)}
+                effettivo={oraTs(f.effettivoArrivo)}
+                proiezione={oraTs(f.proiezioneArrivo)}
+                ritardo={f.ritardo}
+              />
             </span>
             <span className="justify-self-end">
-              <OrarioCoppia teorico={oraTs(f.teoricoPartenza)} effettivo={oraTs(f.effettivoPartenza)} ritardo={f.ritardo} />
+              <OrarioCoppia
+                teorico={oraTs(f.teoricoPartenza)}
+                effettivo={oraTs(f.effettivoPartenza)}
+                proiezione={oraTs(f.proiezionePartenza)}
+                ritardo={f.ritardo}
+              />
             </span>
           </div>
         )

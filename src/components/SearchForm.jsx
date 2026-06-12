@@ -85,6 +85,7 @@ export default function SearchForm({ onCerca, caricamento }) {
   })
   const [errore, setErrore] = useState('')
   const [gps, setGps] = useState('idle') // idle | cercando | ok | errore
+  const [soloDiretti, setSoloDiretti] = useState(false)
 
   // All'avvio provo a precompilare "Da" con la stazione più vicina al dispositivo.
   // Il campo resta comunque modificabile.
@@ -125,7 +126,15 @@ export default function SearchForm({ onCerca, caricamento }) {
       return
     }
     setErrore('')
-    onCerca({ da: da.id, a: a.id, quando })
+    // capisco se la data scelta è in un giorno futuro rispetto a oggi
+    const oggi = new Date()
+    const scelta = new Date(quando)
+    const dataFutura =
+      scelta.getFullYear() > oggi.getFullYear() ||
+      (scelta.getFullYear() === oggi.getFullYear() &&
+        (scelta.getMonth() > oggi.getMonth() ||
+          (scelta.getMonth() === oggi.getMonth() && scelta.getDate() > oggi.getDate())))
+    onCerca({ da: da.id, a: a.id, quando, diretti: soloDiretti, dataFutura })
   }
 
   return (
@@ -161,6 +170,30 @@ export default function SearchForm({ onCerca, caricamento }) {
       </div>
 
       <CampoStazione label="A" value={a} onSelect={setA} />
+
+      {/* Toggle solo treni diretti, sotto la destinazione */}
+      <button
+        type="button"
+        onClick={() => setSoloDiretti((v) => !v)}
+        className={`flex w-full items-center justify-between rounded-lg border px-3 py-2 text-sm transition ${
+          soloDiretti
+            ? 'border-araldico-500 bg-araldico-50 text-araldico-800'
+            : 'border-araldico-100 bg-white text-araldico-700'
+        }`}
+      >
+        <span className="font-medium">Solo treni diretti</span>
+        <span
+          className={`relative h-5 w-9 rounded-full transition ${
+            soloDiretti ? 'bg-araldico-700' : 'bg-gray-300'
+          }`}
+        >
+          <span
+            className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all ${
+              soloDiretti ? 'left-[1.125rem]' : 'left-0.5'
+            }`}
+          />
+        </span>
+      </button>
 
       <div>
         <label className="block text-sm font-medium text-araldico-700 mb-1">Quando</label>
