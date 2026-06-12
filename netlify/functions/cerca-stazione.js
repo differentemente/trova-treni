@@ -23,16 +23,52 @@ export async function handler(event) {
     if (!res.ok) return json(res.status, { error: 'upstream error' })
 
     const data = await res.json()
-    const stations = (data || []).map((s) => ({
-      id: s.id,                    // es. 830002430 — da usare in cerca-viaggio
-      name: s.displayName,         // es. "Verona Porta Nuova"
-      multistation: !!s.multistation, // true per "Milano (Tutte le stazioni)" ecc.
-    }))
+    const stations = (data || [])
+      .filter((s) => isFerroviaria(s))
+      .map((s) => ({
+        id: s.id,                    // es. 830002430 — da usare in cerca-viaggio
+        name: s.displayName,         // es. "Verona Porta Nuova"
+        multistation: !!s.multistation, // true per "Milano (Tutte le stazioni)" ecc.
+      }))
 
     return json(200, { stations })
   } catch (e) {
     return json(500, { error: e.message })
   }
+}
+
+// Tiene solo le vere stazioni ferroviarie, scartando bus/navette/aeroporti.
+// LeFrecce nell'autocomplete include punti di interscambio non ferroviari
+// (es. "Verona Aeroporto", "Verona Autostazione", fermate bus sostitutivi).
+function isFerroviaria(s) {
+  const nome = String(s?.displayName || '')
+  if (!nome) return false
+
+  // 1) se l'API espone un tipo esplicito, scarto i non-treno
+  const tipo = String(s.type || s.category || s.locationType || '').toUpperCase()
+  if (tipo) {
+    if (/BUS|COACH|AIRPORT|AEROPORT|CITY|PUBLIC|TRANSPORT/.test(tipo)) return false
+  }
+
+  // 2) rete di sicurezza sul nome: parole tipiche dei punti non ferroviari
+  const NON_FERROVIARIO = [
+    /\bbus\b/i,
+    /autobus/i,
+    /autostazione/i,
+    /pullman/i,
+    /\bcoach\b/i,
+    /aeroport/i,
+    /airport/i,
+    /\bvia\b.*\baeroport/i,
+    /city\s*terminal/i,
+    /terminal\s*bus/i,
+    /navetta/i,
+    /metro\b/i,
+    /metropolitana/i,
+  ]
+  if (NON_FERROVIARIO.some((re) => re.test(nome))) return false
+
+  return true
 }
 
 const UA =

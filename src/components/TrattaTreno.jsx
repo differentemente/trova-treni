@@ -35,11 +35,11 @@ function OrarioCoppia({ teorico, effettivo, proiezione, ritardo }) {
   }
 
   return (
-    <div className="text-right leading-snug">
-      <div className="text-[15px] text-gray-400">{teorico || '—:—'}</div>
-      <div className={`text-[15px] font-medium ${colSotto}`}>
+    <div className="text-right leading-snug tabular-nums">
+      <div className="whitespace-nowrap text-[13px] text-gray-400">{teorico || '—:—'}</div>
+      <div className={`relative whitespace-nowrap text-[13px] font-medium ${colSotto}`}>
         {sotto || '—:—'}
-        {stimato && <span className="ml-0.5 align-top text-[9px]">~</span>}
+        {stimato && <span className="absolute -right-1.5 top-0 text-[8px]">~</span>}
       </div>
     </div>
   )
@@ -49,7 +49,7 @@ function Pill({ testo, confermato }) {
   if (!testo) return <span className="text-gray-300">—</span>
   const cls = confermato ? 'bg-araldico-700 text-crema' : 'bg-araldico-100 text-araldico-700'
   return (
-    <span className={`inline-block min-w-[1.7rem] rounded-md px-1.5 py-1 text-center text-sm font-semibold ${cls}`}>
+    <span className={`inline-block min-w-[1.4rem] rounded-md px-1 py-0.5 text-center text-[13px] font-semibold ${cls}`}>
       {testo}
     </span>
   )
@@ -76,19 +76,19 @@ function TabellaFermate({ fermate }) {
   const indiceAttuale = Math.max(transitate.lastIndexOf(true), 0)
   return (
     <>
-      <div className="grid grid-cols-[1.5rem_1fr_3rem_3.5rem_3.5rem] items-end gap-x-2 pb-2 text-sm text-gray-400">
+      <div className="grid grid-cols-[1.25rem_minmax(0,1fr)_2rem_2.9rem_2.9rem] items-end gap-x-1.5 pb-2 text-xs text-gray-400">
         <span />
         <span>Stazione</span>
         <span className="text-center">Bin.</span>
         <span className="text-right">Arrivo</span>
-        <span className="text-right">Partenza</span>
+        <span className="text-right">Part.</span>
       </div>
       {fermate.map((f, i) => {
         const primo = i === 0
         const ultimo = i === fermate.length - 1
         const raggiunta = i <= indiceAttuale
         return (
-          <div key={i} className="grid min-h-[3.25rem] grid-cols-[1.5rem_1fr_3rem_3.5rem_3.5rem] items-center gap-x-2">
+          <div key={i} className="grid min-h-[3.25rem] grid-cols-[1.25rem_minmax(0,1fr)_2rem_2.9rem_2.9rem] items-center gap-x-1.5">
             <Timeline
               primo={primo}
               ultimo={ultimo}
@@ -96,7 +96,7 @@ function TabellaFermate({ fermate }) {
               attuale={i === indiceAttuale}
               prossimaRaggiunta={i + 1 <= indiceAttuale}
             />
-            <span className={`py-3 text-[15px] leading-tight ${ultimo ? 'font-bold text-araldico-700' : 'text-gray-900'} ${f.soppressa ? 'line-through opacity-50' : ''}`}>
+            <span className={`min-w-0 break-words py-3 text-[13px] leading-tight ${ultimo ? 'font-bold text-araldico-700' : 'text-gray-900'} ${f.soppressa ? 'line-through opacity-50' : ''}`}>
               {f.nome}
             </span>
             <span className="justify-self-center">
