@@ -30,12 +30,7 @@ export async function statoTreno({ numero, origine, destinazione, partenza, futu
   if (origine) params.set('origine', origine)
   if (destinazione) params.set('destinazione', destinazione)
   if (partenza) params.set('partenza', partenza)
-  if (futura) {
-    params.set('futura', '1')
-    // data target yyyy-MM-dd estratta dall'orario di partenza
-    const m = String(partenza).match(/^(\d{4}-\d{2}-\d{2})/)
-    if (m) params.set('data', m[1])
-  }
+  if (futura) params.set('futura', '1')
   const res = await fetch(`/api/stato-treno?${params}`)
   if (!res.ok) throw new Error('Errore stato treno')
   return res.json()

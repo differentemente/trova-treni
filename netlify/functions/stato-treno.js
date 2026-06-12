@@ -25,14 +25,10 @@ export async function handler(event) {
   const origine = (p.origine || '').trim()
   const destinazione = (p.destinazione || '').trim()
   const partenzaISO = (p.partenza || '').trim()
-  // data target (yyyy-MM-dd): se futura, costruisco il timestamp di quel giorno
-  const dataTarget = (p.data || '').trim()
+  // se la data è futura, mostro la tratta teorica (presa dal treno odierno)
   const futura = (p.futura || '') === '1'
 
   if (!numero) return json(400, { disponibile: false, errore: 'numero treno mancante' })
-
-  // timestamp mezzanotte della data scelta (ms) — per orari teorici futuri
-  const tsTarget = timestampMezzanotte(dataTarget)
 
   try {
     // --- Step 1: lista candidati per quel numero ---
@@ -49,11 +45,10 @@ export async function handler(event) {
     const minutiAttesi = minutiDaISO(partenzaISO)
 
     // --- Step 2: scarico l'andamento dei candidati e scelgo il migliore ---
-    // Per date future uso il timestamp della data scelta al posto di quello odierno.
-    const ordinati = ordinaPerOrigine(candidati, origine).map((c) => ({
-      ...c,
-      ts: futura && tsTarget ? String(tsTarget) : c.ts,
-    }))
+    // NB: anche per le date future uso il treno ODIERNO (timestamp di oggi dato
+    // dall'autocomplete). Il percorso teorico è lo stesso ogni giorno; in modalità
+    // "futura" poi azzero tutta la parte realtime (ritardi, effettivi, stato).
+    const ordinati = ordinaPerOrigine(candidati, origine)
 
     let migliore = null
     let migliorPunteggio = -1
@@ -308,15 +303,6 @@ function orarioPartenzaTeoricoMinuti(d) {
   const date = new Date(Number(ts))
   if (isNaN(date)) return null
   return date.getHours() * 60 + date.getMinutes()
-}
-
-// timestamp (ms) della mezzanotte di una data yyyy-MM-dd in ora italiana
-function timestampMezzanotte(dataISO) {
-  const m = String(dataISO).match(/^(\d{4})-(\d{2})-(\d{2})/)
-  if (!m) return null
-  // mezzanotte locale; ViaggiaTreno usa l'ora italiana
-  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 0, 0, 0, 0)
-  return d.getTime()
 }
 
 // Somma N minuti a un timestamp (ms) e restituisce un nuovo timestamp ms.
