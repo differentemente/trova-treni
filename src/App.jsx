@@ -1,7 +1,17 @@
 import { useState } from 'react'
 import SearchForm from './components/SearchForm'
 import ResultsList from './components/ResultsList'
-import { cercaViaggio } from './lib/api'
+import { cercaViaggio, cercaItalo } from './lib/api'
+
+// minuti dopo mezzanotte da un orario che può essere ISO o "HH:MM"
+function minutiOrario(v) {
+  if (!v) return 0
+  const iso = String(v).match(/T(\d{2}):(\d{2})/)
+  if (iso) return Number(iso[1]) * 60 + Number(iso[2])
+  const hm = String(v).match(/(\d{1,2}):(\d{2})/)
+  if (hm) return Number(hm[1]) * 60 + Number(hm[2])
+  return 0
+}
 
 // arretra un orario ISO "yyyy-MM-ddTHH:mm" di N minuti
 function arretra(quando, minuti) {
@@ -37,6 +47,21 @@ export default function App() {
       setOrarioPiuVecchio(parametri.quando)
       setDataFutura(!!parametri.dataFutura)
       setCercato(true)
+
+      // Italo in parallelo, non bloccante: se arriva, lo fondo e riordino.
+      // Niente Italo per le date future (il tracciamento è solo giornaliero).
+      if (!parametri.dataFutura && parametri.daNome && parametri.aNome) {
+        cercaItalo({ da: parametri.daNome, a: parametri.aNome, quando: parametri.quando })
+          .then((italo) => {
+            if (!italo || italo.length === 0) return
+            setSoluzioni((prev) => {
+              const merged = [...prev, ...italo]
+              merged.sort((x, y) => minutiOrario(x.orarioPartenza) - minutiOrario(y.orarioPartenza))
+              return merged
+            })
+          })
+          .catch(() => {})
+      }
     } catch (e) {
       setErrore('Errore durante la ricerca. Riprova tra qualche secondo.')
     } finally {

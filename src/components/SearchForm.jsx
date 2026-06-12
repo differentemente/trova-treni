@@ -134,7 +134,7 @@ export default function SearchForm({ onCerca, caricamento }) {
       (scelta.getFullYear() === oggi.getFullYear() &&
         (scelta.getMonth() > oggi.getMonth() ||
           (scelta.getMonth() === oggi.getMonth() && scelta.getDate() > oggi.getDate())))
-    onCerca({ da: da.id, a: a.id, quando, diretti: soloDiretti, dataFutura })
+    onCerca({ da: da.id, a: a.id, daNome: da.name, aNome: a.name, quando, diretti: soloDiretti, dataFutura })
   }
 
   return (

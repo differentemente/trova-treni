@@ -5,15 +5,28 @@ import TrattaTreno from './TrattaTreno'
 function ora(iso) {
   if (!iso) return '—'
   const m = String(iso).match(/T(\d{2}:\d{2})/)
-  return m ? m[1] : iso
+  if (m) return m[1]
+  const hm = String(iso).match(/^(\d{1,2}:\d{2})/)
+  if (hm) return hm[1]
+  return iso
+}
+
+function minOf(v) {
+  if (!v) return null
+  const iso = String(v).match(/T(\d{2}):(\d{2})/)
+  if (iso) return Number(iso[1]) * 60 + Number(iso[2])
+  const hm = String(v).match(/(\d{1,2}):(\d{2})/)
+  if (hm) return Number(hm[1]) * 60 + Number(hm[2])
+  return null
 }
 
 function durata(sol) {
   if (sol.durata) return sol.durata
-  const p = new Date(sol.orarioPartenza)
-  const a = new Date(sol.orarioArrivo)
-  if (isNaN(p) || isNaN(a)) return ''
-  const min = Math.round((a - p) / 60000)
+  const p = minOf(sol.orarioPartenza)
+  const a = minOf(sol.orarioArrivo)
+  if (p == null || a == null) return ''
+  let min = a - p
+  if (min < 0) min += 1440
   const h = Math.floor(min / 60)
   return h > 0 ? `${h}h ${String(min % 60).padStart(2, '0')}m` : `${min}m`
 }
@@ -94,7 +107,33 @@ function TabTreno({ treno, dataFutura }) {
   )
 }
 
+// Soluzione Italo: riga dedicata con etichetta, non espandibile (fonte separata)
+function SoluzioneItalo({ sol }) {
+  return (
+    <div className="rounded-2xl bg-white p-4 shadow-sm border border-araldico-100">
+      <div className="flex items-baseline justify-between gap-3">
+        <div className="text-xl font-semibold">
+          {ora(sol.orarioPartenza)} <span className="text-araldico-300">&rarr;</span>{' '}
+          {ora(sol.orarioArrivo)}
+        </div>
+        <div className="text-sm text-araldico-700">{durata(sol)} · Diretto</div>
+      </div>
+      <div className="mt-3">
+        <div className="flex items-center gap-2 rounded-xl border border-[#c8102e]/30 bg-[#c8102e]/5 px-3 py-2">
+          <span className="rounded bg-[#c8102e] px-2 py-0.5 text-sm font-bold text-white whitespace-nowrap">
+            Italo {sol.numero}
+          </span>
+          <span className="flex-1 truncate text-sm text-araldico-700">
+            {sol.da} ({ora(sol.orarioPartenza)}) &rarr; {sol.a} ({ora(sol.orarioArrivo)})
+          </span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function Soluzione({ sol, dataFutura }) {
+  if (sol.operatore === 'italo') return <SoluzioneItalo sol={sol} />
   return (
     <div className="rounded-2xl bg-white p-4 shadow-sm border border-araldico-100">
       <div className="flex items-baseline justify-between gap-3">

@@ -17,6 +17,15 @@ export async function cercaViaggio({ da, a, quando, offset = 0, diretti = false 
   return data.soluzioni
 }
 
+// Collegamenti diretti Italo (fonte separata, non bloccante)
+export async function cercaItalo({ da, a, quando }) {
+  const params = new URLSearchParams({ da, a, quando })
+  const res = await fetch(`/api/cerca-italo?${params}`)
+  if (!res.ok) return []
+  const data = await res.json()
+  return data.soluzioni || []
+}
+
 // Stazione più vicina alla posizione del dispositivo
 export async function stazioneVicina(lat, lng) {
   const res = await fetch(`/api/stazione-vicina?lat=${lat}&lng=${lng}`)
