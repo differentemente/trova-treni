@@ -161,7 +161,7 @@ function PopupTratta({ titolo, fermate, onChiudi }) {
   )
 }
 
-export default function TrattaTreno({ numero, origine, destinazione, partenza, futura }) {
+export default function TrattaTreno({ numero, origine, destinazione, partenza, futura, onStato }) {
   const [stato, setStato] = useState(null)
   const [caricamento, setCaricamento] = useState(true)
   const [popup, setPopup] = useState(false)
@@ -170,8 +170,17 @@ export default function TrattaTreno({ numero, origine, destinazione, partenza, f
     let vivo = true
     setCaricamento(true)
     statoTreno({ numero, origine, destinazione, partenza, futura })
-      .then((s) => vivo && setStato(s))
-      .catch(() => vivo && setStato({ disponibile: false, motivo: 'errore di rete' }))
+      .then((s) => {
+        if (!vivo) return
+        setStato(s)
+        if (onStato) onStato(s) // comunico lo stato al TabTreno per il badge
+      })
+      .catch(() => {
+        if (!vivo) return
+        const errore = { disponibile: false, motivo: 'errore di rete' }
+        setStato(errore)
+        if (onStato) onStato(errore)
+      })
       .finally(() => vivo && setCaricamento(false))
     return () => {
       vivo = false

@@ -16,21 +16,53 @@ function norm(s) {
   return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '')
 }
 
+// Espande le abbreviazioni puntate come nel generatore del dataset, così
+// "Torino Porta Nuova" (LeFrecce) combacia con "Torino P.Nuova" (CSV).
+// IMPORTANTE: l'abbreviazione richiede il punto (p./s./c.le), così non si
+// trasformano per errore lettere dentro le parole (es. "principe").
+function espandi(s) {
+  let t = String(s || '').toLowerCase()
+  const repl = [
+    [/\bp\.\s*nuova\b/g, 'porta nuova'],
+    [/\bp\.\s*garibaldi\b/g, 'porta garibaldi'],
+    [/\bp\.\s*genova\b/g, 'porta genova'],
+    [/\bp\.\s*vescovo\b/g, 'porta vescovo'],
+    [/\bp\.\s*susa\b/g, 'porta susa'],
+    [/\bp\.\s*principe\b/g, 'piazza principe'],
+    [/\bc\.\s*le\b/g, 'centrale'],
+    [/\bscr\.\b/g, 'scrivia'],
+    [/\bsott\.\b/g, 'sotterranea'],
+    [/\bgar\.\b/g, 'garibaldi'],
+  ]
+  for (const [pat, rep] of repl) t = t.replace(pat, rep)
+  return t
+}
+
+// Parole che indicano un punto NON ferroviario: se presenti, mai una stazione.
+const VIETATE = /aeroport|airport|\bbus\b|autobus|autostazione|pullman|navetta|\bmetro\b|metropolitana|fermata\s+bus|city\s*terminal|terminal\s*bus/i
+
 // È una vera stazione ferroviaria?
-// 1) match esatto sul nome normalizzato (caso più comune e veloce)
-// 2) tolleranza: il nome LeFrecce contiene o è contenuto in un nome ufficiale
-//    (gestisce varianti tipo "Desenzano del Garda" vs "Desenzano",
-//     "Verona Porta Nuova" vs "Verona P. Nuova")
+// 1) se contiene una parola vietata (aeroporto, bus...) -> NO subito.
+// 2) match esatto sulle forme normalizzate (originale + abbreviazioni espanse).
+// 3) contenimento controllato: il nome LeFrecce inizia con un nome ufficiale
+//    (es. "Desenzano del Garda-Sirmione" inizia con "Desenzano"), purché non
+//    contenga parole vietate. Niente match inverso, per non far passare gli
+//    aeroporti che "contengono" il nome città.
 function isStazione(displayName) {
-  const n = norm(displayName)
-  if (!n) return false
-  if (NOMI_STAZIONI.has(n)) return true
-  // tolleranza solo per nomi abbastanza lunghi, per evitare falsi positivi
-  if (n.length < 5) return false
-  for (const u of NOMI_LISTA) {
-    if (u.length < 5) continue
-    if (n === u) return true
-    if (n.startsWith(u) || u.startsWith(n)) return true
+  if (VIETATE.test(displayName)) return false
+
+  const forme = new Set([norm(displayName), norm(espandi(displayName))])
+  for (const f of forme) {
+    if (f && NOMI_STAZIONI.has(f)) return true
+  }
+
+  // contenimento controllato: solo nomi-base lunghi, e solo se il display
+  // INIZIA col nome ufficiale (la stazione "Desenzano" copre "Desenzano del...")
+  const n = norm(espandi(displayName))
+  if (n.length >= 6) {
+    for (const u of NOMI_LISTA) {
+      if (u.length >= 6 && n.startsWith(u)) return true
+    }
   }
   return false
 }

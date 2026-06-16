@@ -48,9 +48,11 @@ export default function App() {
       setDataFutura(!!parametri.dataFutura)
       setCercato(true)
 
-      // Italo in parallelo, non bloccante: se arriva, lo fondo e riordino.
-      // Niente Italo per le date future (il tracciamento è solo giornaliero).
-      if (!parametri.dataFutura && parametri.daNome && parametri.aNome) {
+      // Italo TEMPORANEAMENTE DISATTIVATO: l'API biglietti richiede un token
+      // anti-bot non ottenibile da server, e la chiamata consumava invocazioni
+      // a vuoto. Per riattivare quando avremo una soluzione, metti ITALO_ON = true.
+      const ITALO_ON = false
+      if (ITALO_ON && !parametri.dataFutura && parametri.daNome && parametri.aNome) {
         cercaItalo({ da: parametri.daNome, a: parametri.aNome, quando: parametri.quando })
           .then((italo) => {
             if (!italo || italo.length === 0) return

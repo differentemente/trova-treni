@@ -1,5 +1,4 @@
-import { useEffect, useState } from 'react'
-import { statoTreno } from '../lib/api'
+import { useState } from 'react'
 import TrattaTreno from './TrattaTreno'
 
 function ora(iso) {
@@ -45,44 +44,23 @@ function BadgeStato({ stato }) {
   return <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-800">+{stato.ritardoMin}&prime;</span>
 }
 
-// Tab di un singolo treno della soluzione
+// Tab di un singolo treno della soluzione.
+// Il badge di stato NON viene caricato automaticamente (risparmio chiamate):
+// lo stato arriva da TrattaTreno (via onStato) solo quando apri il tab.
 function TabTreno({ treno, dataFutura }) {
   const [aperto, setAperto] = useState(false)
   const [stato, setStato] = useState(null)
 
-  useEffect(() => {
-    let vivo = true
-    // Data futura: niente realtime, il treno non è ancora partito.
-    if (dataFutura || !treno.numero) {
-      setStato(null)
-      return
-    }
-    statoTreno({
-      numero: treno.numero,
-      origine: treno.da,
-      destinazione: treno.a,
-      partenza: treno.partenza,
-    })
-      .then((s) => vivo && setStato(s))
-      .catch(() => vivo && setStato({ disponibile: false }))
-    return () => {
-      vivo = false
-    }
-  }, [treno.numero, treno.da, treno.a, treno.partenza, dataFutura])
-
   const etichetta = [treno.categoria, treno.numero].filter(Boolean).join(' ') || 'Treno'
   const cancellato = stato?.soppresso || stato?.stato === 'cancellato'
-  // cancellato sul segmento non si apre; in data futura SI apre (mostra teorici)
-  const apribile = !cancellato
+  const apribile = !cancellato || !stato // prima di aprire non so se è cancellato: lascio apribile
 
   return (
     <div className={`overflow-hidden rounded-xl border ${cancellato ? 'border-red-200' : 'border-araldico-100'}`}>
       <button
         type="button"
-        onClick={() => apribile && setAperto((v) => !v)}
-        className={`flex w-full items-center gap-2 px-3 py-2 text-left ${
-          apribile ? 'hover:bg-araldico-50' : 'cursor-default'
-        }`}
+        onClick={() => setAperto((v) => !v)}
+        className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-araldico-50"
       >
         <span className="rounded bg-araldico-50 px-2 py-0.5 text-sm font-medium text-araldico-800 whitespace-nowrap">
           {etichetta}
@@ -90,17 +68,18 @@ function TabTreno({ treno, dataFutura }) {
         <span className={`flex-1 truncate text-sm ${cancellato ? 'text-red-700 line-through' : 'text-araldico-700'}`}>
           {treno.da} ({ora(treno.partenza)}) &rarr; {treno.a} ({ora(treno.arrivo)})
         </span>
-        {!dataFutura && <BadgeStato stato={stato} />}
-        {apribile && <span className="text-araldico-300">{aperto ? '\u25B2' : '\u25BC'}</span>}
+        {!dataFutura && stato && <BadgeStato stato={stato} />}
+        <span className="text-araldico-300">{aperto ? '\u25B2' : '\u25BC'}</span>
       </button>
 
-      {aperto && apribile && (
+      {aperto && (
         <TrattaTreno
           numero={treno.numero}
           origine={treno.da}
           destinazione={treno.a}
           partenza={treno.partenza}
           futura={dataFutura}
+          onStato={setStato}
         />
       )}
     </div>
