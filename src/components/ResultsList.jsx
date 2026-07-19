@@ -169,7 +169,7 @@ function Soluzione({ sol, dataFutura, onCambioPreferiti }) {
             {ora(sol.orarioPartenza)} <span className="text-araldico-300">&rarr;</span>{' '}
             {ora(sol.orarioArrivo)}
           </div>
-          {trenoPrincipale && (
+          {trenoPrincipale && !sol.contieneBus && (
             <CuorePreferito treno={trenoPrincipale} onCambio={onCambioPreferiti} />
           )}
         </div>

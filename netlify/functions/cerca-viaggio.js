@@ -69,25 +69,36 @@ export async function handler(event) {
 
     const data = await res.json()
 
-    const soluzioni = (data.solutions || []).map(({ solution }) => ({
-      partenza: solution.origin,
-      arrivo: solution.destination,
-      orarioPartenza: solution.departureTime, // ISO con offset
-      orarioArrivo: solution.arrivalTime,
-      durata: solution.duration ?? null,
-      prezzo: solution.price ? solution.price.amount : null,
-      valuta: solution.price ? solution.price.currency : null,
-      treni: (solution.nodes || []).map((n) => ({
-        da: n.origin,
-        a: n.destination,
-        partenza: n.departureTime,
-        arrivo: n.arrivalTime,
-        categoria: n.train?.trainCategory ?? n.train?.acronym ?? '',
-        // numero treno: serve a ViaggiaTreno per lo stato in tempo reale
-        numero: estraiNumero(n.train),
-      })),
-      cambi: Math.max((solution.nodes || []).length - 1, 0),
-    }))
+    const soluzioni = (data.solutions || []).map(({ solution }) => {
+      const treni = (solution.nodes || []).map((n) => {
+        const categoria = n.train?.trainCategory ?? n.train?.acronym ?? ''
+        return {
+          da: n.origin,
+          a: n.destination,
+          partenza: n.departureTime,
+          arrivo: n.arrivalTime,
+          categoria,
+          // numero treno: serve a ViaggiaTreno per lo stato in tempo reale
+          numero: estraiNumero(n.train),
+          // true se il segmento è un autobus (sostitutivo o integrato):
+          // questi non sono tracciati da ViaggiaTreno, quindi niente stato realtime
+          isBus: rilevaBus(n),
+        }
+      })
+      return {
+        partenza: solution.origin,
+        arrivo: solution.destination,
+        orarioPartenza: solution.departureTime, // ISO con offset
+        orarioArrivo: solution.arrivalTime,
+        durata: solution.duration ?? null,
+        prezzo: solution.price ? solution.price.amount : null,
+        valuta: solution.price ? solution.price.currency : null,
+        treni,
+        // la soluzione contiene almeno un bus? (per nascondere il cuore in lista)
+        contieneBus: treni.some((t) => t.isBus),
+        cambi: Math.max((solution.nodes || []).length - 1, 0),
+      }
+    })
 
     return json(200, { soluzioni })
   } catch (e) {
@@ -140,6 +151,34 @@ function estraiNumero(train) {
     train.name ?? train.trainNumber ?? train.number ?? train.code ?? train.acronym ?? ''
   const m = String(raw).match(/\d{3,5}/)
   return m ? m[0] : String(raw)
+}
+
+// Riconosce se un segmento è un autobus (sostitutivo o servizio integrato su
+// gomma). LeFrecce non usa un campo unico coerente, quindi cerco parole chiave
+// nei vari campi testuali del mezzo e in eventuali flag di tipo trasporto.
+function rilevaBus(n) {
+  const t = n?.train || {}
+  // campi testuali dove può comparire l'indicazione del mezzo
+  const testi = [
+    t.trainCategory,
+    t.acronym,
+    t.name,
+    t.description,
+    t.denomination,
+    n.transportMean,
+    n.transportMode,
+    n.mean,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toUpperCase()
+
+  // parole chiave che indicano gomma (IT/EN)
+  if (/\b(BUS|AUTOBUS|AUTOCORSA|AUTOSOSTITUTIVO|PULLMAN|COACH|GOMMA)\b/.test(testi)) return true
+  // alcuni feed usano un codice mezzo esplicito
+  const mode = String(n.transportMode || n.transportMean || '').toUpperCase()
+  if (mode === 'BUS' || mode === 'COACH') return true
+  return false
 }
 
 function normalizeDate(quando) {

@@ -128,8 +128,12 @@ export default function App() {
   }
 
   return (
-    // pb-24 lascia spazio sopra la tab bar fissa (h-16 + safe-area)
-    <div className="mx-auto max-w-xl px-4 pb-24 pt-6">
+    // padding-top con safe-area per non finire sotto la notch/Dynamic Island;
+    // pb-28 lascia spazio in fondo così il FAB non copre gli ultimi contenuti
+    <div
+      className="mx-auto max-w-xl px-4 pb-28"
+      style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 1.5rem)' }}
+    >
       <header className="mb-5 flex flex-col items-center gap-2 text-center">
         <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-araldico-700 shadow-sm">
           <svg viewBox="0 0 24 24" className="h-9 w-9" fill="none" stroke="#faf7f0" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">

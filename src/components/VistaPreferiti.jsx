@@ -68,6 +68,7 @@ function CardPreferito({ pref, onRimuovi }) {
         destinazione={pref.a}
         partenza={pref.partenza}
         futura={futura}
+        compatta
       />
     </div>
   )

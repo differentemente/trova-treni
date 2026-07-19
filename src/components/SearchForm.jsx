@@ -51,10 +51,32 @@ function CampoStazione({ label, value, onSelect }) {
     setAperto(false)
   }
 
+  // Quando entro nel campo: se c'è già una stazione selezionata, svuoto il
+  // testo così posso scrivere una stazione nuova da capo, senza dover
+  // cancellare a mano quella pescata in automatico. La selezione viene
+  // ripristinata se esco senza scegliere nulla (vedi onBlurCampo).
+  function onFocusCampo() {
+    if (value?.name) {
+      staScrivendo.current = true
+      setTesto('')
+      setOpzioni([])
+      setAperto(false)
+    } else if (opzioni.length > 0) {
+      setAperto(true)
+    }
+  }
+
   // quando esco dal campo, l'utente ha finito di scrivere
   function onBlurCampo() {
     staScrivendo.current = false
-    setTimeout(() => setAperto(false), 150)
+    setTimeout(() => {
+      setAperto(false)
+      // se ho svuotato il campo ma non ho scelto nulla di nuovo, ripristino
+      // la stazione precedente invece di lasciare il campo vuoto
+      if (value?.name && testo.trim() === '') {
+        setTesto(value.name)
+      }
+    }, 150)
   }
 
   return (
@@ -64,7 +86,7 @@ function CampoStazione({ label, value, onSelect }) {
         type="text"
         value={testo}
         onChange={onChange}
-        onFocus={() => opzioni.length > 0 && setAperto(true)}
+        onFocus={onFocusCampo}
         onBlur={onBlurCampo}
         placeholder="Cerca stazione…"
         className="w-full rounded-lg border border-araldico-100 bg-white px-3 py-2.5
