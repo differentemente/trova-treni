@@ -8,6 +8,12 @@ function oraTs(ts) {
   return d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
 }
 
+// prima lettera maiuscola (per i messaggi di stato)
+function maiuscola(s) {
+  if (!s) return s
+  return s.charAt(0).toUpperCase() + s.slice(1)
+}
+
 function etichettaStato(s) {
   if (!s?.disponibile) return { testo: 'n.d.', sotto: '', classe: 'bg-gray-100 text-gray-500' }
   if (s.stato === 'programmato') return { testo: 'Orari', sotto: 'previsti', classe: 'bg-araldico-50 text-araldico-800' }
@@ -272,11 +278,15 @@ export default function TrattaTreno({ numero, origine, destinazione, partenza, f
   }
 
   if (!stato?.disponibile || !stato.fermate?.length) {
+    // Se il motivo è già la frase generica, non lo ripeto. Altrimenti lo aggiungo
+    // come dettaglio (es. per le date future: "gli orari... non ancora disponibili").
+    const generico = 'percorso momentaneamente non disponibile'
+    const dettaglio =
+      stato?.motivo && stato.motivo.toLowerCase() !== generico ? maiuscola(stato.motivo) : null
     return (
       <div className="px-4 py-4 text-sm text-araldico-500">
-        {stato?.motivo
-          ? `Percorso non disponibile: ${stato.motivo}.`
-          : 'Percorso in tempo reale non disponibile per questo treno.'}
+        Percorso momentaneamente non disponibile.
+        {dettaglio ? ` ${dettaglio}.` : ''}
       </div>
     )
   }

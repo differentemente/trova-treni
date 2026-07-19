@@ -38,7 +38,12 @@ export async function handler(event) {
 
     const candidati = parseAutocomplete(autoText) // [{ nome, codice, ts }]
     if (candidati.length === 0) {
-      return json(200, { disponibile: false, motivo: 'treno non tracciato da ViaggiaTreno' })
+      return json(200, {
+        disponibile: false,
+        motivo: futura
+          ? 'gli orari in tempo reale per questa data non sono ancora disponibili'
+          : 'percorso momentaneamente non disponibile',
+      })
     }
 
     // minuti dopo mezzanotte attesi per la partenza (per confronto orario)
@@ -68,12 +73,15 @@ export async function handler(event) {
       if (punteggio >= 3) break
     }
 
-    // Nessun candidato con dati = il treno non è proprio tracciato da ViaggiaTreno
-    // (tipico di alcuni Frecciarossa/AV: l'endpoint risponde 204 No Content).
+    // Nessun candidato con dati = ViaggiaTreno non espone il tempo reale per
+    // questo treno adesso (tipico di alcuni AV, o di date future non ancora
+    // in linea, o di treni la cui corsa odierna è già conclusa).
     if (!almenoUnoConDati || !migliore) {
       return json(200, {
         disponibile: false,
-        motivo: 'ViaggiaTreno non fornisce il tempo reale per questo treno',
+        motivo: futura
+          ? 'gli orari in tempo reale per questa data non sono ancora disponibili'
+          : 'percorso momentaneamente non disponibile',
       })
     }
 

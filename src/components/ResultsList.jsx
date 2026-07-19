@@ -105,6 +105,14 @@ function TabTreno({ treno, dataFutura }) {
   const cancellato = stato?.soppresso || stato?.stato === 'cancellato'
   const apribile = !cancellato || !stato // prima di aprire non so se è cancellato: lascio apribile
 
+  // Un treno è "di fatto futuro" se il suo orario di partenza (data completa) è
+  // successivo ad adesso. Copre il caso: cerco stasera (22:43) e mi escono corse
+  // del mattino dopo (06:43) — quelle vanno mostrate con orari teorici previsti,
+  // non cercate in tempo reale (che ViaggiaTreno non ha ancora per domani).
+  const partenzaDate = treno.partenza ? new Date(treno.partenza) : null
+  const treniFuturo = partenzaDate && !isNaN(partenzaDate) && partenzaDate.getTime() > Date.now()
+  const usaFutura = dataFutura || treniFuturo
+
   return (
     <div className={`overflow-hidden rounded-xl border ${cancellato ? 'border-red-200' : 'border-araldico-100'}`}>
       <button
@@ -118,7 +126,7 @@ function TabTreno({ treno, dataFutura }) {
         <span className={`flex-1 truncate text-sm ${cancellato ? 'text-red-700 line-through' : 'text-araldico-700'}`}>
           {treno.da} ({ora(treno.partenza)}) &rarr; {treno.a} ({ora(treno.arrivo)})
         </span>
-        {!dataFutura && stato && <BadgeStato stato={stato} />}
+        {!usaFutura && stato && <BadgeStato stato={stato} />}
         <span className="text-araldico-300">{aperto ? '\u25B2' : '\u25BC'}</span>
       </button>
 
@@ -128,7 +136,7 @@ function TabTreno({ treno, dataFutura }) {
           origine={treno.da}
           destinazione={treno.a}
           partenza={treno.partenza}
-          futura={dataFutura}
+          futura={usaFutura}
           onStato={setStato}
         />
       )}
