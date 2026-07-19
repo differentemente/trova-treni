@@ -3,6 +3,7 @@ import SearchForm from './components/SearchForm'
 import ResultsList from './components/ResultsList'
 import TabBar from './components/TabBar'
 import VistaPreferiti from './components/VistaPreferiti'
+import BottoneCaffe from './components/BottoneCaffe'
 import { cercaViaggio, cercaItalo } from './lib/api'
 import { leggiPreferiti } from './lib/preferiti'
 
@@ -134,7 +135,11 @@ export default function App() {
       className="mx-auto max-w-xl px-4 pb-28"
       style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 1.5rem)' }}
     >
-      <header className="mb-5 flex flex-col items-center gap-2 text-center">
+      <header className="relative mb-5 flex flex-col items-center gap-2 text-center">
+        {/* pulsante donazione in alto a sinistra, non sposta il logo centrato */}
+        <div className="absolute left-0 top-0">
+          <BottoneCaffe />
+        </div>
         <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-araldico-700 shadow-sm">
           <svg viewBox="0 0 24 24" className="h-9 w-9" fill="none" stroke="#faf7f0" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
             <rect x="5" y="3" width="14" height="13" rx="3" />
