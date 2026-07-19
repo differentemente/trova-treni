@@ -159,7 +159,7 @@ export default function App() {
 
       {vista === 'ricerca' ? (
         <>
-          <SearchForm onCerca={cerca} caricamento={caricamento} />
+          <SearchForm onCerca={cerca} caricamento={caricamento} cercato={cercato} />
 
           {errore && <p className="mt-4 text-center text-sm text-red-700">{errore}</p>}
 

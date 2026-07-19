@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { cercaStazione, stazioneVicina } from '../lib/api'
+import { leggiCronologia, aggiungiRicerca } from '../lib/cronologia'
 
 // Campo stazione con autocomplete (debounce 300ms sugli id LeFrecce)
 function CampoStazione({ label, value, onSelect }) {
@@ -114,7 +115,7 @@ function CampoStazione({ label, value, onSelect }) {
   )
 }
 
-export default function SearchForm({ onCerca, caricamento }) {
+export default function SearchForm({ onCerca, caricamento, cercato }) {
   const [da, setDa] = useState(null)
   const [a, setA] = useState(null)
   const [quando, setQuando] = useState(() => {
@@ -128,6 +129,14 @@ export default function SearchForm({ onCerca, caricamento }) {
   // incrementato allo scambio: forza il remount dei campi così il testo
   // mostrato si allinea sempre ai nuovi valori da/a
   const [scambioKey, setScambioKey] = useState(0)
+  // cronologia ricerche e stato della tendina (aperta/chiusa dopo la ricerca)
+  const [cronologia, setCronologia] = useState([])
+  const [cronologiaAperta, setCronologiaAperta] = useState(false)
+
+  // carico la cronologia all'avvio
+  useEffect(() => {
+    setCronologia(leggiCronologia())
+  }, [])
 
   // All'avvio provo a precompilare "Da" con la stazione più vicina al dispositivo.
   // Il campo resta comunque modificabile.
@@ -169,6 +178,10 @@ export default function SearchForm({ onCerca, caricamento }) {
       return
     }
     setErrore('')
+    // salvo la tratta nella cronologia (dedup + max 3)
+    setCronologia(aggiungiRicerca(da, a))
+    // dopo la ricerca la cronologia si comprime in tendina
+    setCronologiaAperta(false)
     // capisco se la data scelta è in un giorno futuro rispetto a oggi
     const oggi = new Date()
     const scelta = new Date(quando)
@@ -178,6 +191,15 @@ export default function SearchForm({ onCerca, caricamento }) {
         (scelta.getMonth() > oggi.getMonth() ||
           (scelta.getMonth() === oggi.getMonth() && scelta.getDate() > oggi.getDate())))
     onCerca({ da: da.id, a: a.id, daNome: da.name, aNome: a.name, quando, diretti: soloDiretti, dataFutura })
+  }
+
+  // Applica una tratta della cronologia ai campi Da/A (NON lancia la ricerca:
+  // è l'utente a premere "Cerca soluzioni").
+  function applicaCronologia(r) {
+    setDa(r.da)
+    setA(r.a)
+    setScambioKey((k) => k + 1) // forza il refresh del testo nei campi
+    setErrore('')
   }
 
   return (
@@ -261,6 +283,50 @@ export default function SearchForm({ onCerca, caricamento }) {
       >
         {caricamento ? 'Ricerca in corso…' : 'Cerca soluzioni'}
       </button>
+
+      {cronologia.length > 0 && (
+        <div className="pt-1">
+          {/* Intestazione: dopo una ricerca fa da toggle della tendina */}
+          <button
+            type="button"
+            onClick={() => cercato && setCronologiaAperta((v) => !v)}
+            className={`flex w-full items-center justify-between ${cercato ? 'cursor-pointer' : 'cursor-default'}`}
+          >
+            <span className="text-sm font-semibold text-araldico-700">I tuoi viaggi passati</span>
+            {cercato && (
+              <span className="text-araldico-400 text-xs">
+                {cronologiaAperta ? '\u25B2' : '\u25BC'}
+              </span>
+            )}
+          </button>
+
+          {/* Le voci: sempre visibili prima della ricerca; in tendina dopo */}
+          {(!cercato || cronologiaAperta) && (
+            <ul className="mt-2 space-y-1.5">
+              {cronologia.map((r, i) => (
+                <li key={i}>
+                  <button
+                    type="button"
+                    onClick={() => applicaCronologia(r)}
+                    className="flex w-full items-center gap-2 rounded-lg border border-araldico-100
+                               bg-araldico-50/50 px-3 py-2 text-left text-sm text-araldico-800
+                               hover:bg-araldico-50 active:scale-[0.99]"
+                  >
+                    <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-araldico-400" fill="none"
+                         stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="9" />
+                      <path d="M12 7v5l3 2" />
+                    </svg>
+                    <span className="flex-1 truncate">
+                      {r.da.name} <span className="text-araldico-300">&rarr;</span> {r.a.name}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
     </div>
   )
 }
