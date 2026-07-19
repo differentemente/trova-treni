@@ -49,10 +49,13 @@ export async function handler(event) {
     // minuti dopo mezzanotte attesi per la partenza (per confronto orario)
     const minutiAttesi = minutiDaISO(partenzaISO)
 
+    // Timestamp (ms) della mezzanotte del giorno RICHIESTO dall'utente. Per le
+    // corse future provo a interrogare ViaggiaTreno su QUESTA data invece che
+    // su oggi: l'autocomplete dà il ts di oggi, ma andamentoTreno accetta il ts
+    // di mezzanotte del giorno di partenza, quindi posso puntare al giorno giusto.
+    const tsGiornoRichiesto = mezzanotteMsDaISO(partenzaISO)
+
     // --- Step 2: scarico l'andamento dei candidati e scelgo il migliore ---
-    // NB: anche per le date future uso il treno ODIERNO (timestamp di oggi dato
-    // dall'autocomplete). Il percorso teorico è lo stesso ogni giorno; in modalità
-    // "futura" poi azzero tutta la parte realtime (ritardi, effettivi, stato).
     const ordinati = ordinaPerOrigine(candidati, origine)
 
     let migliore = null
@@ -60,8 +63,19 @@ export async function handler(event) {
     let almenoUnoConDati = false
 
     for (const c of ordinati.slice(0, 8)) {
-      const d = await scaricaAndamento(c.codice, numero, c.ts)
-      if (!d) continue // 204/vuoto: questo candidato non ha dati
+      // provo prima con la data richiesta (per le future), poi con quella di oggi
+      const tentativi = []
+      if (tsGiornoRichiesto != null && tsGiornoRichiesto !== Number(c.ts)) {
+        tentativi.push(tsGiornoRichiesto)
+      }
+      tentativi.push(c.ts)
+
+      let d = null
+      for (const ts of tentativi) {
+        d = await scaricaAndamento(c.codice, numero, ts)
+        if (d) break
+      }
+      if (!d) continue // nessun tentativo ha dati per questo candidato
       almenoUnoConDati = true
 
       const punteggio = valuta(d, origine, destinazione, minutiAttesi)
@@ -85,9 +99,25 @@ export async function handler(event) {
       })
     }
 
-    // A questo punto un treno l'ho identificato. Non rifiuto più:
-    // se era l'unico candidato non c'è ambiguità, se erano molti ho preso il
-    // migliore per origine/destinazione/orario. Mostro comunque la tratta.
+    // A questo punto un treno l'ho identificato tra i candidati con dati.
+    //
+    // MA: per le date future c'è un rischio. L'autocomplete cerca sempre nella
+    // giornata odierna; se il treno giusto (giusta origine) oggi non ha dati e
+    // un ALTRO treno con lo stesso numero ma origine diversa ce li ha, rischio
+    // di mostrare il percorso sbagliato (es. numero 2616: Verona→X vs Brescia→
+    // Milano). Per evitarlo, se ho un'origine attesa e il candidato scelto NON
+    // parte da lì, non mostro un percorso a caso: dico che non è disponibile.
+    const origineCombacia = !origine || simili(migliore?.origine, origine)
+    if (!origineCombacia) {
+      return json(200, {
+        disponibile: false,
+        motivo: futura
+          ? 'gli orari in tempo reale per questa data non sono ancora disponibili'
+          : 'percorso momentaneamente non disponibile',
+      })
+    }
+
+    // Origine coerente: mostro la tratta.
     return componiRisposta(migliore, origine, destinazione, futura)
   } catch (e) {
     return json(200, { disponibile: false, motivo: 'errore di rete', errore: e.message })
@@ -405,6 +435,19 @@ function minutiDaISO(iso) {
   const m = String(iso).match(/T(\d{2}):(\d{2})/)
   if (!m) return null
   return Number(m[1]) * 60 + Number(m[2])
+}
+
+// Timestamp (ms) della mezzanotte locale del giorno indicato da un ISO
+// "2026-07-20T06:43:00+02:00" -> ms della mezzanotte del 20/07. ViaggiaTreno
+// usa questo valore come identificativo di giornata nelle chiamate andamentoTreno.
+function mezzanotteMsDaISO(iso) {
+  const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (!m) return null
+  const y = Number(m[1]), mo = Number(m[2]), g = Number(m[3])
+  if (!y || !mo || !g) return null
+  // mezzanotte in ora locale italiana (la stessa convenzione usata da ViaggiaTreno)
+  const d = new Date(y, mo - 1, g, 0, 0, 0, 0)
+  return isNaN(d) ? null : d.getTime()
 }
 
 // minuti dopo mezzanotte dell'orario di partenza teorico dalla prima fermata
