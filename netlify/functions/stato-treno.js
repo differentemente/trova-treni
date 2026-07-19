@@ -259,16 +259,33 @@ function componiRisposta(d, origine, destinazione, futura = false) {
     !partenzaSegmento ||
     (partenzaSegmento.effettivoPartenza == null && partenzaSegmento.effettivoArrivo == null)
 
+  // --- Il treno è ARRIVATO a destinazione (dell'utente)? ---
+  // La destinazione è l'ultima fermata del segmento richiesto. Se ha già
+  // l'arrivo effettivo, per l'utente la corsa è conclusa: mostro "arrivato"
+  // con il ritardo REALE su quella fermata, non quello globale del treno
+  // (che continua fino al capolinea vero).
+  const fermataArrivo = fermate[fermate.length - 1]
+  const arrivato =
+    !!fermataArrivo && fermataArrivo.effettivoArrivo != null && fermate.length > 0
+  // ritardo all'arrivo del segmento = effettivo - teorico sull'ultima fermata
+  let ritardoArrivo = null
+  if (arrivato) {
+    const d1 = deltaMin(fermataArrivo.effettivoArrivo, fermataArrivo.teoricoArrivo)
+    ritardoArrivo = d1 != null ? d1 : (typeof fermataArrivo.ritardo === 'number' ? fermataArrivo.ritardo : 0)
+    if (ritardoArrivo < 0) ritardoArrivo = 0
+  }
+
   // Stato del segmento, coerente con i dati reali delle fermate:
-  // - se una fermata del segmento è transitata => il treno è PARTITO
-  //   (quindi in_orario o ritardo, mai "non partito")
+  // arrivato > cancellato > partito(in orario/ritardo) > non partito
   let statoSegmento
   if (futura) {
     statoSegmento = 'programmato'
   } else if (cancellataSulSegmento) {
     statoSegmento = 'cancellato'
+  } else if (arrivato) {
+    statoSegmento = 'arrivato'
   } else if (!segmentoNonPartito || ultimaTransitata) {
-    // treno partito: in orario o in ritardo secondo ritardoMin
+    // treno partito e ancora in viaggio: in orario o in ritardo
     statoSegmento = ritardoMin > 0 ? 'ritardo' : 'in_orario'
   } else if (ritardoMin > 0) {
     statoSegmento = 'non_partito_ritardo'
@@ -290,6 +307,11 @@ function componiRisposta(d, origine, destinazione, futura = false) {
     cancellatoSulSegmento: futura ? false : cancellataSulSegmento,
     stato: statoSegmento,
     ritardoMin,
+    // info arrivo a destinazione (segmento dell'utente)
+    arrivato,
+    ritardoArrivo,
+    oraArrivoEffettivo: arrivato ? fermataArrivo.effettivoArrivo : null,
+    nomeArrivo: fermataArrivo?.nome ?? null,
     ultimoRilevamento: futura ? null : nomeUltimoRilevamento,
     oraUltimoRilevamento: futura
       ? null

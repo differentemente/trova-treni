@@ -12,6 +12,10 @@ function etichettaStato(s) {
   if (!s?.disponibile) return { testo: 'n.d.', sotto: '', classe: 'bg-gray-100 text-gray-500' }
   if (s.stato === 'programmato') return { testo: 'Orari', sotto: 'previsti', classe: 'bg-araldico-50 text-araldico-800' }
   if (s.stato === 'cancellato') return { testo: 'Canc.', sotto: '', classe: 'bg-red-100 text-red-800' }
+  if (s.stato === 'arrivato')
+    return s.ritardoArrivo > 0
+      ? { testo: `+${s.ritardoArrivo}`, sotto: 'arrivato', classe: 'bg-amber-100 text-amber-800' }
+      : { testo: 'Arr.', sotto: 'in orario', classe: 'bg-green-100 text-green-800' }
   if (s.stato === 'non_partito_ritardo')
     return { testo: 'Non partito', sotto: `in ritardo di ${s.ritardoMin}′`, classe: 'bg-amber-100 text-amber-800' }
   if (s.stato === 'non_partito') return { testo: 'Non', sotto: 'partito', classe: 'bg-araldico-50 text-araldico-800' }
@@ -181,6 +185,20 @@ function BoxStato({ stato }) {
     sottotitolo = 'Su questa tratta'
     classe = 'border-red-200 bg-red-50 text-red-800'
     puntino = 'bg-red-500'
+  } else if (stato.stato === 'arrivato') {
+    // treno arrivato alla destinazione dell'utente
+    const oraArr = oraTs(stato.oraArrivoEffettivo)
+    if (stato.ritardoArrivo > 0) {
+      titolo = `Arrivato a destinazione con ${stato.ritardoArrivo} min di ritardo`
+      sottotitolo = oraArr ? `Arrivo a ${stato.nomeArrivo} alle ${oraArr}` : `Arrivo a ${stato.nomeArrivo}`
+      classe = 'border-amber-300 bg-amber-50 text-amber-900'
+      puntino = 'bg-amber-500'
+    } else {
+      titolo = 'Arrivato a destinazione in orario'
+      sottotitolo = oraArr ? `Arrivo a ${stato.nomeArrivo} alle ${oraArr}` : `Arrivo a ${stato.nomeArrivo}`
+      classe = 'border-green-300 bg-green-50 text-green-900'
+      puntino = 'bg-green-500'
+    }
   } else if (stato.stato === 'non_partito_ritardo') {
     titolo = `Non ancora partito · in ritardo di ${stato.ritardoMin} min`
     sottotitolo = 'La partenza teorica è già passata'
