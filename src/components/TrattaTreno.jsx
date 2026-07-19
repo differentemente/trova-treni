@@ -14,6 +14,16 @@ function maiuscola(s) {
   return s.charAt(0).toUpperCase() + s.slice(1)
 }
 
+// "HH:MM" da un orario ISO string (es. "2026-07-20T06:43:00+02:00")
+function oraStr(v) {
+  if (!v) return '—'
+  const m = String(v).match(/T(\d{2}:\d{2})/)
+  if (m) return m[1]
+  const hm = String(v).match(/^(\d{1,2}:\d{2})/)
+  if (hm) return hm[1]
+  return v
+}
+
 function etichettaStato(s) {
   if (!s?.disponibile) return { testo: 'n.d.', sotto: '', classe: 'bg-gray-100 text-gray-500' }
   if (s.stato === 'programmato') return { testo: 'Orari', sotto: 'previsti', classe: 'bg-araldico-50 text-araldico-800' }
@@ -247,7 +257,7 @@ function BoxStato({ stato }) {
   )
 }
 
-export default function TrattaTreno({ numero, origine, destinazione, partenza, futura, onStato, compatta = false }) {
+export default function TrattaTreno({ numero, origine, destinazione, partenza, arrivo, futura, onStato, compatta = false }) {
   const [stato, setStato] = useState(null)
   const [caricamento, setCaricamento] = useState(true)
   const [popup, setPopup] = useState(false)
@@ -278,15 +288,32 @@ export default function TrattaTreno({ numero, origine, destinazione, partenza, f
   }
 
   if (!stato?.disponibile || !stato.fermate?.length) {
-    // Se il motivo è già la frase generica, non lo ripeto. Altrimenti lo aggiungo
-    // come dettaglio (es. per le date future: "gli orari... non ancora disponibili").
-    const generico = 'percorso momentaneamente non disponibile'
-    const dettaglio =
-      stato?.motivo && stato.motivo.toLowerCase() !== generico ? maiuscola(stato.motivo) : null
+    // Percorso completo non disponibile (treno non in circolazione: corsa
+    // conclusa o data futura). Invece di un messaggio vuoto, mostro gli estremi
+    // della tratta con gli orari teorici che abbiamo dalla ricerca. Le fermate
+    // intermedie non sono ottenibili in questo caso (limite delle fonti).
     return (
-      <div className="px-4 py-4 text-sm text-araldico-500">
-        Percorso momentaneamente non disponibile.
-        {dettaglio ? ` ${dettaglio}.` : ''}
+      <div className={compatta ? 'bg-white px-3 pb-3 pt-1' : 'border-t border-araldico-100 bg-white px-3 pb-3 pt-3'}>
+        <div className="rounded-xl border border-araldico-100 bg-araldico-50/40 px-3 py-3">
+          <div className="mb-1 text-xs font-medium uppercase tracking-wide text-araldico-500">
+            Orari previsti
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="truncate text-sm font-semibold text-araldico-800">{origine}</div>
+              <div className="truncate text-xs text-araldico-500">{destinazione}</div>
+            </div>
+            <div className="text-right">
+              <div className="text-lg font-bold tabular-nums text-araldico-800">
+                {oraStr(partenza)} <span className="text-araldico-300">&rarr;</span> {oraStr(arrivo)}
+              </div>
+            </div>
+          </div>
+          <p className="mt-2 text-xs text-araldico-500">
+            Il percorso dettagliato con le fermate sarà disponibile quando il treno entra in
+            circolazione.
+          </p>
+        </div>
       </div>
     )
   }

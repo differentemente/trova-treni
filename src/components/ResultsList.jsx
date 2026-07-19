@@ -136,6 +136,7 @@ function TabTreno({ treno, dataFutura }) {
           origine={treno.da}
           destinazione={treno.a}
           partenza={treno.partenza}
+          arrivo={treno.arrivo}
           futura={usaFutura}
           onStato={setStato}
         />

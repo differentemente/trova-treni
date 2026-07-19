@@ -70,6 +70,7 @@ function CardPreferito({ pref, onRimuovi }) {
         origine={pref.da}
         destinazione={pref.a}
         partenza={pref.partenza}
+        arrivo={pref.orarioArrivo}
         futura={futura}
         compatta
       />
@@ -108,9 +109,8 @@ export default function VistaPreferiti({ onCambio }) {
   return (
     <div className="mt-2 space-y-3">
       <p className="px-1 text-sm text-araldico-600">
-        {preferiti.length} treno{preferiti.length > 1 ? 'i' : ''} seguito
-        {preferiti.length > 1 ? 'i' : ''}. I preferiti si rimuovono automaticamente
-        all&rsquo;arrivo del treno.
+        {preferiti.length} {preferiti.length > 1 ? 'treni seguiti' : 'treno seguito'}. I
+        preferiti si rimuovono automaticamente all&rsquo;arrivo del treno.
       </p>
       {preferiti.map((p) => (
         <CardPreferito key={`${p.numero}-${p.giorno}-${p.da}-${p.a}`} pref={p} onRimuovi={rimuovi} />
