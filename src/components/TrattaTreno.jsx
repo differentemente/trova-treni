@@ -140,10 +140,12 @@ function PopupTratta({ titolo, fermate, onChiudi }) {
     <div
       className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-3 sm:p-6"
       onClick={onChiudi}
+      style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 1rem)' }}
     >
       <div
-        className="relative mt-6 max-h-[85vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-4 shadow-xl"
+        className="relative w-full max-w-md overflow-y-auto rounded-2xl bg-white p-4 shadow-xl"
         onClick={(e) => e.stopPropagation()}
+        style={{ maxHeight: 'calc(100vh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 2.5rem)' }}
       >
         <button
           type="button"

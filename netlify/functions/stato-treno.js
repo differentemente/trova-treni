@@ -128,7 +128,18 @@ function componiRisposta(d, origine, destinazione, futura = false) {
     return json(200, { disponibile: false, soppresso: true, motivo: 'treno soppresso' })
   }
 
-  const nonPartito = d.oraUltimoRilevamento == null || d.stazioneUltimoRilevamento === '--'
+  // "Non partito" NON può basarsi solo su oraUltimoRilevamento /
+  // stazioneUltimoRilevamento: ViaggiaTreno a volte lascia quei campi vuoti
+  // anche per treni chiaramente in viaggio (con orari effettivi nelle fermate).
+  // Verità di base: il treno è PARTITO se una qualsiasi fermata ha un orario
+  // reale registrato (arrivo o partenza effettivi).
+  const haRilevamentiFermate = Array.isArray(d.fermate)
+    ? d.fermate.some((f) => f.partenzaReale != null || f.arrivoReale != null)
+    : false
+  const rilevamentoGlobaleAssente =
+    d.oraUltimoRilevamento == null || d.stazioneUltimoRilevamento === '--'
+  // non partito solo se NON c'è nessun rilevamento, né globale né per fermata
+  const nonPartito = rilevamentoGlobaleAssente && !haRilevamentiFermate
 
   // Ritardo dichiarato da ViaggiaTreno (globale sul treno)
   let ritardoMin = futura ? 0 : typeof d.ritardo === 'number' ? d.ritardo : 0
@@ -234,17 +245,43 @@ function componiRisposta(d, origine, destinazione, futura = false) {
   // Cancellazione DENTRO il segmento che interessa all'utente
   const cancellataSulSegmento = fermate.some((f) => f.soppressa)
 
-  // Ricalcolo "transitata" e indice attuale solo sul segmento
+  // Ultima fermata effettivamente transitata NEL SEGMENTO (ha un orario reale).
+  // È la fonte di verità su "dov'è il treno", più affidabile dei campi globali
+  // di ViaggiaTreno che a volte restano vuoti.
+  let ultimaTransitata = null
+  for (const f of fermate) {
+    if (f.effettivoPartenza != null || f.effettivoArrivo != null) ultimaTransitata = f
+  }
+
+  // Il segmento è "non partito" solo se la sua prima fermata non ha orari reali
   const partenzaSegmento = fermate[0]
   const segmentoNonPartito =
     !partenzaSegmento ||
     (partenzaSegmento.effettivoPartenza == null && partenzaSegmento.effettivoArrivo == null)
 
-  let statoSegmento = stato
-  if (futura) statoSegmento = 'programmato'
-  else if (cancellataSulSegmento) statoSegmento = 'cancellato'
-  else if (segmentoNonPartito && ritardoMin > 0) statoSegmento = 'non_partito_ritardo'
-  else if (segmentoNonPartito && stato !== 'ritardo') statoSegmento = 'non_partito'
+  // Stato del segmento, coerente con i dati reali delle fermate:
+  // - se una fermata del segmento è transitata => il treno è PARTITO
+  //   (quindi in_orario o ritardo, mai "non partito")
+  let statoSegmento
+  if (futura) {
+    statoSegmento = 'programmato'
+  } else if (cancellataSulSegmento) {
+    statoSegmento = 'cancellato'
+  } else if (!segmentoNonPartito || ultimaTransitata) {
+    // treno partito: in orario o in ritardo secondo ritardoMin
+    statoSegmento = ritardoMin > 0 ? 'ritardo' : 'in_orario'
+  } else if (ritardoMin > 0) {
+    statoSegmento = 'non_partito_ritardo'
+  } else {
+    statoSegmento = 'non_partito'
+  }
+
+  // Nome dell'ultimo rilevamento: preferisco quello globale di ViaggiaTreno,
+  // ma se manca lo ricavo dall'ultima fermata transitata del segmento.
+  const nomeUltimoRilevamento =
+    (!rilevamentoGlobaleAssente ? d.stazioneUltimoRilevamento : null) ||
+    ultimaTransitata?.nome ||
+    null
 
   return json(200, {
     disponibile: true,
@@ -253,8 +290,13 @@ function componiRisposta(d, origine, destinazione, futura = false) {
     cancellatoSulSegmento: futura ? false : cancellataSulSegmento,
     stato: statoSegmento,
     ritardoMin,
-    ultimoRilevamento: futura || nonPartito ? null : d.stazioneUltimoRilevamento,
-    oraUltimoRilevamento: futura || nonPartito ? null : d.oraUltimoRilevamento,
+    ultimoRilevamento: futura ? null : nomeUltimoRilevamento,
+    oraUltimoRilevamento: futura
+      ? null
+      : d.oraUltimoRilevamento ??
+        ultimaTransitata?.effettivoPartenza ??
+        ultimaTransitata?.effettivoArrivo ??
+        null,
     partenza: fermate[0]?.nome ?? d.origine,
     arrivo: fermate[fermate.length - 1]?.nome ?? d.destinazione,
     fermate,
