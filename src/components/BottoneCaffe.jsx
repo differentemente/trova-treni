@@ -31,11 +31,11 @@ export default function BottoneCaffe() {
         type="button"
         onClick={() => setAperto(true)}
         aria-label="Sostieni il progetto"
-        className="flex h-8 w-8 items-center justify-center rounded-full
-                   text-araldico-500 transition hover:bg-araldico-50
-                   hover:text-araldico-700 active:scale-90"
+        className="flex h-10 w-10 items-center justify-center rounded-full
+                   bg-araldico-50 text-araldico-700 transition
+                   hover:bg-araldico-100 active:scale-90"
       >
-        <IconaCaffe className="h-4 w-4" />
+        <IconaCaffe className="h-5 w-5" />
       </button>
 
       {aperto && (
