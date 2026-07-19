@@ -1,7 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import SearchForm from './components/SearchForm'
 import ResultsList from './components/ResultsList'
+import TabBar from './components/TabBar'
+import VistaPreferiti from './components/VistaPreferiti'
 import { cercaViaggio, cercaItalo } from './lib/api'
+import { leggiPreferiti } from './lib/preferiti'
 
 // minuti dopo mezzanotte da un orario che può essere ISO o "HH:MM"
 function minutiOrario(v) {
@@ -34,6 +37,14 @@ export default function App() {
   // orario della soluzione più "vecchia" mostrata, per i treni precedenti
   const [orarioPiuVecchio, setOrarioPiuVecchio] = useState(null)
   const [dataFutura, setDataFutura] = useState(false)
+  // vista corrente: 'ricerca' | 'preferiti'
+  const [vista, setVista] = useState('ricerca')
+  const [numPreferiti, setNumPreferiti] = useState(0)
+
+  // conteggio preferiti all'avvio (fa anche la pulizia dei treni arrivati)
+  useEffect(() => {
+    setNumPreferiti(leggiPreferiti().length)
+  }, [])
 
   async function cerca(parametri) {
     setCaricamento(true)
@@ -117,7 +128,8 @@ export default function App() {
   }
 
   return (
-    <div className="mx-auto max-w-xl px-4 pb-12 pt-6">
+    // pb-24 lascia spazio sopra la tab bar fissa (h-16 + safe-area)
+    <div className="mx-auto max-w-xl px-4 pb-24 pt-6">
       <header className="mb-5 flex flex-col items-center gap-2 text-center">
         <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-araldico-700 shadow-sm">
           <svg viewBox="0 0 24 24" className="h-9 w-9" fill="none" stroke="#faf7f0" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
@@ -136,18 +148,35 @@ export default function App() {
         </div>
       </header>
 
-      <SearchForm onCerca={cerca} caricamento={caricamento} />
+      {vista === 'ricerca' ? (
+        <>
+          <SearchForm onCerca={cerca} caricamento={caricamento} />
 
-      {errore && <p className="mt-4 text-center text-sm text-red-700">{errore}</p>}
+          {errore && <p className="mt-4 text-center text-sm text-red-700">{errore}</p>}
 
-      <ResultsList
-        soluzioni={soluzioni}
-        cercato={cercato}
-        dataFutura={dataFutura}
-        onAltre={altre}
-        onPrecedenti={precedenti}
-        caricamentoAltre={caricamentoAltre}
-        caricamentoPrec={caricamentoPrec}
+          <ResultsList
+            soluzioni={soluzioni}
+            cercato={cercato}
+            dataFutura={dataFutura}
+            onAltre={altre}
+            onPrecedenti={precedenti}
+            caricamentoAltre={caricamentoAltre}
+            caricamentoPrec={caricamentoPrec}
+            onCambioPreferiti={setNumPreferiti}
+          />
+        </>
+      ) : (
+        <VistaPreferiti onCambio={setNumPreferiti} />
+      )}
+
+      <TabBar
+        vista={vista}
+        numPreferiti={numPreferiti}
+        onApriPreferiti={() => {
+          setNumPreferiti(leggiPreferiti().length) // aggiorna conteggio e pulisce
+          setVista('preferiti')
+        }}
+        onChiudi={() => setVista('ricerca')}
       />
     </div>
   )

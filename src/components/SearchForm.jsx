@@ -7,15 +7,25 @@ function CampoStazione({ label, value, onSelect }) {
   const [opzioni, setOpzioni] = useState([])
   const [aperto, setAperto] = useState(false)
   const timer = useRef(null)
+  // true mentre l'utente sta digitando in questo campo: blocca la
+  // risincronizzazione dal prop, che su iOS "mangiava" il primo carattere.
+  const staScrivendo = useRef(false)
 
+  // Sincronizzo il testo col prop SOLO quando il cambiamento arriva
+  // dall'esterno (es. GPS che precompila "Da", o il pulsante scambia),
+  // MAI mentre l'utente sta scrivendo nel campo.
   useEffect(() => {
+    if (staScrivendo.current) return
     setTesto(value?.name || '')
   }, [value])
 
   function onChange(e) {
     const t = e.target.value
+    staScrivendo.current = true
     setTesto(t)
-    onSelect(null)
+    // azzero la selezione solo se c'era una stazione scelta e il testo è
+    // effettivamente cambiato rispetto ad essa (evita reset inutili)
+    if (value && value.name !== t) onSelect(null)
     clearTimeout(timer.current)
     if (t.trim().length < 2) {
       setOpzioni([])
@@ -35,9 +45,16 @@ function CampoStazione({ label, value, onSelect }) {
   }
 
   function scegli(stazione) {
+    staScrivendo.current = false
     onSelect(stazione)
     setTesto(stazione.name)
     setAperto(false)
+  }
+
+  // quando esco dal campo, l'utente ha finito di scrivere
+  function onBlurCampo() {
+    staScrivendo.current = false
+    setTimeout(() => setAperto(false), 150)
   }
 
   return (
@@ -48,7 +65,7 @@ function CampoStazione({ label, value, onSelect }) {
         value={testo}
         onChange={onChange}
         onFocus={() => opzioni.length > 0 && setAperto(true)}
-        onBlur={() => setTimeout(() => setAperto(false), 150)}
+        onBlur={onBlurCampo}
         placeholder="Cerca stazione…"
         className="w-full rounded-lg border border-araldico-100 bg-white px-3 py-2.5
                    focus:outline-none focus:ring-2 focus:ring-araldico-500"
@@ -86,6 +103,9 @@ export default function SearchForm({ onCerca, caricamento }) {
   const [errore, setErrore] = useState('')
   const [gps, setGps] = useState('idle') // idle | cercando | ok | errore
   const [soloDiretti, setSoloDiretti] = useState(false)
+  // incrementato allo scambio: forza il remount dei campi così il testo
+  // mostrato si allinea sempre ai nuovi valori da/a
+  const [scambioKey, setScambioKey] = useState(0)
 
   // All'avvio provo a precompilare "Da" con la stazione più vicina al dispositivo.
   // Il campo resta comunque modificabile.
@@ -118,6 +138,7 @@ export default function SearchForm({ onCerca, caricamento }) {
     const tmp = da
     setDa(a)
     setA(tmp)
+    setScambioKey((k) => k + 1)
   }
 
   function invia() {
@@ -140,6 +161,7 @@ export default function SearchForm({ onCerca, caricamento }) {
   return (
     <div className="rounded-2xl bg-white p-4 shadow-sm border border-araldico-100 space-y-3">
       <CampoStazione
+        key={`da-${scambioKey}`}
         label={
           gps === 'cercando'
             ? 'Da · rilevo posizione…'
@@ -169,7 +191,7 @@ export default function SearchForm({ onCerca, caricamento }) {
         </button>
       </div>
 
-      <CampoStazione label="A" value={a} onSelect={setA} />
+      <CampoStazione key={`a-${scambioKey}`} label="A" value={a} onSelect={setA} />
 
       {/* Toggle solo treni diretti, sotto la destinazione */}
       <button

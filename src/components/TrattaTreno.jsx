@@ -12,6 +12,8 @@ function etichettaStato(s) {
   if (!s?.disponibile) return { testo: 'n.d.', sotto: '', classe: 'bg-gray-100 text-gray-500' }
   if (s.stato === 'programmato') return { testo: 'Orari', sotto: 'previsti', classe: 'bg-araldico-50 text-araldico-800' }
   if (s.stato === 'cancellato') return { testo: 'Canc.', sotto: '', classe: 'bg-red-100 text-red-800' }
+  if (s.stato === 'non_partito_ritardo')
+    return { testo: 'Non partito', sotto: `in ritardo di ${s.ritardoMin}′`, classe: 'bg-amber-100 text-amber-800' }
   if (s.stato === 'non_partito') return { testo: 'Non', sotto: 'partito', classe: 'bg-araldico-50 text-araldico-800' }
   if (s.stato === 'in_orario') return { testo: 'In', sotto: 'orario', classe: 'bg-green-100 text-green-800' }
   return { testo: `+${s.ritardoMin}`, sotto: 'Ritardo', classe: 'bg-amber-100 text-amber-800' }

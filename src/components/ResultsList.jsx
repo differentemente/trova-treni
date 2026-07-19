@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import TrattaTreno from './TrattaTreno'
+import { isPreferito, togglePreferito } from '../lib/preferiti'
 
 function ora(iso) {
   if (!iso) return '—'
@@ -30,6 +31,49 @@ function durata(sol) {
   return h > 0 ? `${h}h ${String(min % 60).padStart(2, '0')}m` : `${min}m`
 }
 
+// Cuore per salvare/rimuovere un treno dai preferiti.
+// Opera sul primo treno della soluzione (per i diretti è l'unico).
+function CuorePreferito({ treno, onCambio }) {
+  const datiPref = {
+    numero: treno.numero,
+    categoria: treno.categoria,
+    da: treno.da,
+    a: treno.a,
+    partenza: treno.partenza,
+    orarioArrivo: treno.arrivo,
+  }
+  const [attivo, setAttivo] = useState(() => isPreferito(datiPref))
+
+  function click(e) {
+    e.stopPropagation()
+    const { attivo: nuovo, lista } = togglePreferito(datiPref)
+    setAttivo(nuovo)
+    if (onCambio) onCambio(lista.length)
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={click}
+      aria-label={attivo ? 'Rimuovi dai preferiti' : 'Aggiungi ai preferiti'}
+      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full
+                 transition hover:bg-araldico-50 active:scale-90"
+    >
+      <svg
+        viewBox="0 0 24 24"
+        className="h-6 w-6 transition-colors"
+        fill={attivo ? '#dc2626' : 'none'}
+        stroke={attivo ? '#dc2626' : '#9ca3af'}
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z" />
+      </svg>
+    </button>
+  )
+}
+
 // Badge di stato compatto per un singolo treno (in lista)
 function BadgeStato({ stato }) {
   if (!stato) return <span className="text-xs text-araldico-400">…</span>
@@ -37,6 +81,8 @@ function BadgeStato({ stato }) {
     return <span className="rounded bg-red-100 px-1.5 py-0.5 text-[11px] font-medium text-red-800">cancellato</span>
   if (!stato.disponibile)
     return <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[11px] text-gray-500">n.d.</span>
+  if (stato.stato === 'non_partito_ritardo')
+    return <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-800">non partito · +{stato.ritardoMin}&prime;</span>
   if (stato.stato === 'non_partito')
     return <span className="rounded bg-araldico-50 px-1.5 py-0.5 text-[11px] text-araldico-800">non partito</span>
   if (stato.stato === 'in_orario')
@@ -111,14 +157,21 @@ function SoluzioneItalo({ sol }) {
   )
 }
 
-function Soluzione({ sol, dataFutura }) {
+function Soluzione({ sol, dataFutura, onCambioPreferiti }) {
   if (sol.operatore === 'italo') return <SoluzioneItalo sol={sol} />
+  // il treno "principale" della soluzione, su cui agisce il cuore
+  const trenoPrincipale = sol.treni?.[0]
   return (
     <div className="rounded-2xl bg-white p-4 shadow-sm border border-araldico-100">
-      <div className="flex items-baseline justify-between gap-3">
-        <div className="text-xl font-semibold">
-          {ora(sol.orarioPartenza)} <span className="text-araldico-300">&rarr;</span>{' '}
-          {ora(sol.orarioArrivo)}
+      <div className="flex items-baseline justify-between gap-2">
+        <div className="flex items-center gap-1">
+          <div className="text-xl font-semibold">
+            {ora(sol.orarioPartenza)} <span className="text-araldico-300">&rarr;</span>{' '}
+            {ora(sol.orarioArrivo)}
+          </div>
+          {trenoPrincipale && (
+            <CuorePreferito treno={trenoPrincipale} onCambio={onCambioPreferiti} />
+          )}
         </div>
         <div className="text-sm text-araldico-700">
           {durata(sol)} ·{' '}
@@ -143,6 +196,7 @@ export default function ResultsList({
   onPrecedenti,
   caricamentoAltre,
   caricamentoPrec,
+  onCambioPreferiti,
 }) {
   if (!cercato) return null
 
@@ -167,7 +221,7 @@ export default function ResultsList({
       </button>
 
       {soluzioni.map((sol, i) => (
-        <Soluzione key={i} sol={sol} dataFutura={dataFutura} />
+        <Soluzione key={i} sol={sol} dataFutura={dataFutura} onCambioPreferiti={onCambioPreferiti} />
       ))}
 
       <button

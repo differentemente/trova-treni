@@ -129,10 +129,31 @@ function componiRisposta(d, origine, destinazione, futura = false) {
   }
 
   const nonPartito = d.oraUltimoRilevamento == null || d.stazioneUltimoRilevamento === '--'
-  const ritardoMin = futura ? 0 : typeof d.ritardo === 'number' ? d.ritardo : 0
+
+  // Ritardo dichiarato da ViaggiaTreno (globale sul treno)
+  let ritardoMin = futura ? 0 : typeof d.ritardo === 'number' ? d.ritardo : 0
+
+  // Se il treno NON è ancora partito ma l'orario teorico di partenza è già
+  // passato, il treno è di fatto in ritardo anche se ViaggiaTreno non lo dichiara
+  // ancora. Stimo il ritardo minimo come (adesso - partenza teorica).
+  // Es: teorica 13:00, ora 13:10, non partito => ritardo >= 10 min.
+  let ritardoStimatoNonPartito = 0
+  if (!futura && nonPartito) {
+    const partTeoTs = d.fermate?.[0]?.partenza_teorica
+    if (partTeoTs != null) {
+      const diffMin = Math.floor((Date.now() - Number(partTeoTs)) / 60000)
+      if (diffMin > 0) ritardoStimatoNonPartito = diffMin
+    }
+  }
+  // il ritardo effettivo del treno non partito è il maggiore tra quello
+  // dichiarato e quello stimato dallo scorrere del tempo
+  if (!futura && nonPartito && ritardoStimatoNonPartito > ritardoMin) {
+    ritardoMin = ritardoStimatoNonPartito
+  }
 
   let stato
   if (futura) stato = 'programmato'
+  else if (nonPartito && ritardoMin > 0) stato = 'non_partito_ritardo'
   else if (nonPartito) stato = 'non_partito'
   else if (ritardoMin <= 0) stato = 'in_orario'
   else stato = 'ritardo'
@@ -165,18 +186,35 @@ function componiRisposta(d, origine, destinazione, futura = false) {
 
   // --- Proiezione del ritardo sulle fermate non ancora raggiunte ---
   // (saltata per le date future: non c'è ritardo da proiettare)
+  //
+  // Logica robusta: il ritardo da proiettare è quello REALE dell'ultima fermata
+  // transitata, calcolato come (orario effettivo - orario teorico). Non mi affido
+  // solo a f.ritardo perché ViaggiaTreno spesso non lo popola per fermata. Così
+  // se il treno recupera (o accumula) ritardo lungo la corsa, le proiezioni delle
+  // fermate successive si aggiornano di conseguenza invece di restare "congelate".
   if (!futura) {
-    let ritardoCorrente = ritardoMin
+    // ritardo di partenza: se non partito uso il ritardo stimato/dichiarato
+    let ritardoCorrente = nonPartito ? ritardoMin : 0
+
     for (const f of fermateComplete) {
       if (f.transitata) {
-        if (typeof f.ritardo === 'number') ritardoCorrente = f.ritardo
+        // ritardo reale osservato in questa fermata:
+        // preferisco il delta effettivo-teorico (in partenza, poi in arrivo),
+        // e in mancanza ricado su f.ritardo dichiarato.
+        const dPart = deltaMin(f.effettivoPartenza, f.teoricoPartenza)
+        const dArr = deltaMin(f.effettivoArrivo, f.teoricoArrivo)
+        if (dPart != null) ritardoCorrente = dPart
+        else if (dArr != null) ritardoCorrente = dArr
+        else if (typeof f.ritardo === 'number') ritardoCorrente = f.ritardo
         f.proiezioneArrivo = null
         f.proiezionePartenza = null
       } else {
-        f.proiezioneArrivo =
-          ritardoCorrente > 0 ? sommaMinuti(f.teoricoArrivo, ritardoCorrente) : null
-        f.proiezionePartenza =
-          ritardoCorrente > 0 ? sommaMinuti(f.teoricoPartenza, ritardoCorrente) : null
+        // fermata futura: proietto il ritardo corrente sul teorico.
+        // Il ritardo non può scendere sotto 0 nella proiezione (un treno in
+        // orario non "arriva prima" del teorico per definizione di proiezione).
+        const r = ritardoCorrente > 0 ? ritardoCorrente : 0
+        f.proiezioneArrivo = r > 0 ? sommaMinuti(f.teoricoArrivo, r) : null
+        f.proiezionePartenza = r > 0 ? sommaMinuti(f.teoricoPartenza, r) : null
       }
     }
   }
@@ -205,6 +243,7 @@ function componiRisposta(d, origine, destinazione, futura = false) {
   let statoSegmento = stato
   if (futura) statoSegmento = 'programmato'
   else if (cancellataSulSegmento) statoSegmento = 'cancellato'
+  else if (segmentoNonPartito && ritardoMin > 0) statoSegmento = 'non_partito_ritardo'
   else if (segmentoNonPartito && stato !== 'ritardo') statoSegmento = 'non_partito'
 
   return json(200, {
@@ -311,6 +350,16 @@ function sommaMinuti(ts, minuti) {
   const n = Number(ts)
   if (isNaN(n)) return null
   return n + minuti * 60000
+}
+
+// Differenza in minuti tra due timestamp (effettivo - teorico).
+// Restituisce null se manca uno dei due. Positivo = ritardo, negativo = anticipo.
+function deltaMin(effettivo, teorico) {
+  if (effettivo == null || teorico == null) return null
+  const e = Number(effettivo)
+  const t = Number(teorico)
+  if (isNaN(e) || isNaN(t)) return null
+  return Math.round((e - t) / 60000)
 }
 
 function pick(v) {
