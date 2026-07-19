@@ -163,6 +163,64 @@ function PopupTratta({ titolo, fermate, onChiudi }) {
   )
 }
 
+// Box di stato ben leggibile per la vista preferiti: dice a colpo d'occhio se
+// il treno è in orario o in ritardo, di quanti minuti, e dov'è l'ultimo
+// rilevamento. Colori pieni per non lasciare dubbi.
+function BoxStato({ stato }) {
+  let titolo, sottotitolo, classe, puntino
+
+  if (stato.futura) {
+    titolo = 'Orari previsti'
+    sottotitolo = 'Treno non ancora in viaggio'
+    classe = 'border-araldico-200 bg-araldico-50 text-araldico-800'
+    puntino = 'bg-araldico-400'
+  } else if (stato.stato === 'cancellato') {
+    titolo = 'Treno cancellato'
+    sottotitolo = 'Su questa tratta'
+    classe = 'border-red-200 bg-red-50 text-red-800'
+    puntino = 'bg-red-500'
+  } else if (stato.stato === 'non_partito_ritardo') {
+    titolo = `Non ancora partito · in ritardo di ${stato.ritardoMin} min`
+    sottotitolo = 'La partenza teorica è già passata'
+    classe = 'border-amber-300 bg-amber-50 text-amber-900'
+    puntino = 'bg-amber-500'
+  } else if (stato.stato === 'non_partito') {
+    titolo = 'Non ancora partito'
+    sottotitolo = 'In orario alla partenza'
+    classe = 'border-araldico-200 bg-araldico-50 text-araldico-800'
+    puntino = 'bg-araldico-400'
+  } else if (stato.stato === 'in_orario') {
+    titolo = 'In orario'
+    sottotitolo = stato.ultimoRilevamento
+      ? `Ultimo rilevamento: ${stato.ultimoRilevamento}${
+          stato.oraUltimoRilevamento ? ` (${oraTs(stato.oraUltimoRilevamento)})` : ''
+        }`
+      : 'In viaggio'
+    classe = 'border-green-300 bg-green-50 text-green-900'
+    puntino = 'bg-green-500'
+  } else {
+    // ritardo
+    titolo = `In ritardo di ${stato.ritardoMin} min`
+    sottotitolo = stato.ultimoRilevamento
+      ? `Ultimo rilevamento: ${stato.ultimoRilevamento}${
+          stato.oraUltimoRilevamento ? ` (${oraTs(stato.oraUltimoRilevamento)})` : ''
+        }`
+      : 'In viaggio'
+    classe = 'border-amber-300 bg-amber-50 text-amber-900'
+    puntino = 'bg-amber-500'
+  }
+
+  return (
+    <div className={`flex items-start gap-2.5 rounded-xl border px-3 py-2.5 ${classe}`}>
+      <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${puntino}`} />
+      <div className="min-w-0">
+        <div className="text-sm font-bold leading-tight">{titolo}</div>
+        <div className="text-xs opacity-80">{sottotitolo}</div>
+      </div>
+    </div>
+  )
+}
+
 export default function TrattaTreno({ numero, origine, destinazione, partenza, futura, onStato, compatta = false }) {
   const [stato, setStato] = useState(null)
   const [caricamento, setCaricamento] = useState(true)
@@ -209,72 +267,73 @@ export default function TrattaTreno({ numero, origine, destinazione, partenza, f
   return (
     <div className={compatta ? 'bg-white px-3 pb-3 pt-1' : 'border-t border-araldico-100 bg-white px-3 pb-3 pt-3'}>
       {compatta ? (
-        /* Versione compatta (preferiti): la tratta è già scritta nella card
-           sopra, quindi qui mostro solo lo stato e, se serve, il link alla
-           tratta completa. Niente header che ripete partenza→arrivo. */
-        <div className="mb-2 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <span className={`flex items-center gap-1 rounded-lg px-2.5 py-1 ${et.classe}`}>
-              <span className="text-sm font-bold leading-none">{et.testo}</span>
-              {et.sotto && <span className="text-xs">{et.sotto}</span>}
-            </span>
-            {!stato.futura && stato.oraUltimoRilevamento && (
-              <span className="text-xs text-gray-400">
-                agg. {oraTs(stato.oraUltimoRilevamento)}
-              </span>
-            )}
-          </div>
+        /* Versione compatta (preferiti): box di stato chiaro, poi divisorio,
+           poi la tabella fermate, poi il pulsante per il percorso intero. */
+        <>
+          <BoxStato stato={stato} />
+          {stato.cancellatoSulSegmento && (
+            <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+              Alcune fermate di questa tratta sono cancellate.
+            </p>
+          )}
+          {/* divisorio tra il box stato e l'intestazione della tabella */}
+          <div className="my-3 h-px bg-araldico-100" />
+          <TabellaFermate fermate={stato.fermate} />
+          {/* pulsante per aprire il percorso completo del treno */}
           {haTrattaCompleta && (
             <button
               type="button"
               onClick={() => setPopup(true)}
-              className="text-xs font-medium text-araldico-600 underline-offset-2 hover:underline"
+              className="mt-3 w-full rounded-xl border border-araldico-300 px-4 py-2.5
+                         text-sm font-semibold text-araldico-700 hover:bg-araldico-50
+                         active:scale-[0.99]"
             >
-              percorso completo
+              Visualizza intero percorso del treno
             </button>
           )}
-        </div>
+        </>
       ) : (
-        /* Header cliccabile: apre il pop-up con la tratta completa */
-        <button
-          type="button"
-          onClick={() => haTrattaCompleta && setPopup(true)}
-          className={`mb-3 flex w-full items-stretch gap-2 rounded-2xl border border-gray-200 p-3 text-left ${
-            haTrattaCompleta ? 'hover:border-araldico-300 hover:bg-araldico-50' : 'cursor-default'
-          }`}
-        >
-          <div className="flex-1">
-            <div className="text-lg font-bold leading-tight text-gray-900">
-              {stato.futura ? `${stato.partenza} → ${stato.arrivo}` : stato.ultimoRilevamento || stato.partenza}
-            </div>
-            {stato.futura ? (
-              <div className="text-sm text-gray-400">Orari previsti (treno non ancora in viaggio)</div>
-            ) : stato.oraUltimoRilevamento ? (
-              <div className="text-sm text-gray-400">Ultimo rilevamento: {oraTs(stato.oraUltimoRilevamento)}</div>
-            ) : (
-              <div className="text-sm text-gray-400">In attesa di rilevamento</div>
-            )}
-            {haTrattaCompleta && (
-              <div className="mt-1 text-xs font-medium text-araldico-600">
-                Tocca per il percorso completo ({stato.origineTreno} → {stato.destinazioneTreno})
+        <>
+          {/* Header cliccabile: apre il pop-up con la tratta completa */}
+          <button
+            type="button"
+            onClick={() => haTrattaCompleta && setPopup(true)}
+            className={`mb-3 flex w-full items-stretch gap-2 rounded-2xl border border-gray-200 p-3 text-left ${
+              haTrattaCompleta ? 'hover:border-araldico-300 hover:bg-araldico-50' : 'cursor-default'
+            }`}
+          >
+            <div className="flex-1">
+              <div className="text-lg font-bold leading-tight text-gray-900">
+                {stato.futura ? `${stato.partenza} → ${stato.arrivo}` : stato.ultimoRilevamento || stato.partenza}
               </div>
-            )}
-          </div>
-          <div className={`flex flex-col items-center justify-center rounded-xl px-4 ${et.classe}`}>
-            <span className="text-xl font-bold leading-none">{et.testo}</span>
-            {et.sotto && <span className="text-xs">{et.sotto}</span>}
-          </div>
-        </button>
-      )}
+              {stato.futura ? (
+                <div className="text-sm text-gray-400">Orari previsti (treno non ancora in viaggio)</div>
+              ) : stato.oraUltimoRilevamento ? (
+                <div className="text-sm text-gray-400">Ultimo rilevamento: {oraTs(stato.oraUltimoRilevamento)}</div>
+              ) : (
+                <div className="text-sm text-gray-400">In attesa di rilevamento</div>
+              )}
+              {haTrattaCompleta && (
+                <div className="mt-1 text-xs font-medium text-araldico-600">
+                  Tocca per il percorso completo ({stato.origineTreno} → {stato.destinazioneTreno})
+                </div>
+              )}
+            </div>
+            <div className={`flex flex-col items-center justify-center rounded-xl px-4 ${et.classe}`}>
+              <span className="text-xl font-bold leading-none">{et.testo}</span>
+              {et.sotto && <span className="text-xs">{et.sotto}</span>}
+            </div>
+          </button>
 
-      {stato.cancellatoSulSegmento && (
-        <p className="mb-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-          Alcune fermate di questa tratta sono cancellate.
-        </p>
-      )}
+          {stato.cancellatoSulSegmento && (
+            <p className="mb-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+              Alcune fermate di questa tratta sono cancellate.
+            </p>
+          )}
 
-      {/* Vista compatta: solo il segmento richiesto */}
-      <TabellaFermate fermate={stato.fermate} />
+          <TabellaFermate fermate={stato.fermate} />
+        </>
+      )}
 
       {popup && (
         <PopupTratta

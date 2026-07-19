@@ -61,6 +61,9 @@ function CardPreferito({ pref, onRimuovi }) {
         </button>
       </div>
 
+      {/* divisorio tra intestazione della card e la traccia treno */}
+      <div className="mx-4 mt-3 h-px bg-araldico-100" />
+
       {/* Traccia treno GIÀ aperta: niente da espandere */}
       <TrattaTreno
         numero={pref.numero}
@@ -106,7 +109,8 @@ export default function VistaPreferiti({ onCambio }) {
     <div className="mt-2 space-y-3">
       <p className="px-1 text-sm text-araldico-600">
         {preferiti.length} treno{preferiti.length > 1 ? 'i' : ''} seguito
-        {preferiti.length > 1 ? 'i' : ''}. Si rimuovono da soli una volta arrivati.
+        {preferiti.length > 1 ? 'i' : ''}. I preferiti si rimuovono automaticamente
+        all&rsquo;arrivo del treno.
       </p>
       {preferiti.map((p) => (
         <CardPreferito key={`${p.numero}-${p.giorno}-${p.da}-${p.a}`} pref={p} onRimuovi={rimuovi} />
