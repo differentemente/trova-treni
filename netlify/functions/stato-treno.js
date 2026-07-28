@@ -83,8 +83,9 @@ export async function handler(event) {
         migliorPunteggio = punteggio
         migliore = d
       }
-      // match perfetto (origine + destinazione + orario): mi fermo subito
-      if (punteggio >= 3) break
+      // match forte (passa da entrambe le stazioni + orario coerente):
+      // inutile continuare a interrogare gli altri candidati
+      if (punteggio >= 4) break
     }
 
     // Nessun candidato con dati = ViaggiaTreno non espone il tempo reale per
@@ -101,14 +102,17 @@ export async function handler(event) {
 
     // A questo punto un treno l'ho identificato tra i candidati con dati.
     //
-    // MA: per le date future c'è un rischio. L'autocomplete cerca sempre nella
-    // giornata odierna; se il treno giusto (giusta origine) oggi non ha dati e
-    // un ALTRO treno con lo stesso numero ma origine diversa ce li ha, rischio
-    // di mostrare il percorso sbagliato (es. numero 2616: Verona→X vs Brescia→
-    // Milano). Per evitarlo, se ho un'origine attesa e il candidato scelto NON
-    // parte da lì, non mostro un percorso a caso: dico che non è disponibile.
-    const origineCombacia = !origine || simili(migliore?.origine, origine)
-    if (!origineCombacia) {
+    // Validazione: devo assicurarmi di non mostrare il percorso di un treno
+    // OMONIMO ma diverso (stesso numero, altra linea). Il controllo corretto è
+    // che il treno PASSI dalla stazione da cui parte l'utente — NON che ci
+    // abbia il capolinea: nella stragrande maggioranza dei casi si sale in una
+    // fermata intermedia (es. REG 16198 Treviso→Vicenza preso a Castelfranco).
+    const passaDaOrigine =
+      !origine ||
+      (Array.isArray(migliore?.fermate) &&
+        migliore.fermate.some((f) => simili(f.stazione, origine)))
+
+    if (!passaDaOrigine) {
       return json(200, {
         disponibile: false,
         motivo: futura
@@ -117,7 +121,7 @@ export async function handler(event) {
       })
     }
 
-    // Origine coerente: mostro la tratta.
+    // Il treno passa dalla stazione richiesta: mostro la tratta.
     return componiRisposta(migliore, origine, destinazione, futura)
   } catch (e) {
     return json(200, { disponibile: false, motivo: 'errore di rete', errore: e.message })
@@ -142,13 +146,34 @@ async function scaricaAndamento(codice, numero, ts) {
 // +1 origine, +1 destinazione, +1 orario di partenza vicino (<= 4 min)
 function valuta(d, origine, destinazione, minutiAttesi) {
   let s = 0
+  const fermate = Array.isArray(d?.fermate) ? d.fermate : []
+  const iOrig = origine ? fermate.findIndex((f) => simili(f.stazione, origine)) : -1
+  const iDest = destinazione ? fermate.findIndex((f) => simili(f.stazione, destinazione)) : -1
+
+  // Il treno passa dalla stazione di partenza dell'utente (anche intermedia)
+  if (origine && iOrig >= 0) s++
+  // ...e da quella di arrivo, DOPO la partenza (giusto verso di marcia)
+  if (destinazione && iDest >= 0 && (iOrig < 0 || iDest > iOrig)) s++
+  // bonus se coincidono anche i capolinea: match ancora più forte
   if (origine && simili(d.origine, origine)) s++
   if (destinazione && simili(d.destinazione, destinazione)) s++
+
   if (minutiAttesi != null) {
-    const partTeo = orarioPartenzaTeoricoMinuti(d)
-    if (partTeo != null && Math.abs(partTeo - minutiAttesi) <= 4) s++
+    // confronto l'orario atteso con la partenza dalla stazione dell'utente
+    // (non con quella del capolinea, che può essere molto diversa)
+    const partTeo =
+      iOrig >= 0 ? minutiDaTs(fermate[iOrig]?.partenza_teorica) : orarioPartenzaTeoricoMinuti(d)
+    if (partTeo != null && Math.abs(partTeo - minutiAttesi) <= 4) s += 2
   }
   return s
+}
+
+// minuti dopo mezzanotte da un timestamp ms
+function minutiDaTs(ts) {
+  if (ts == null) return null
+  const d = new Date(Number(ts))
+  if (isNaN(d)) return null
+  return d.getHours() * 60 + d.getMinutes()
 }
 
 function componiRisposta(d, origine, destinazione, futura = false) {
