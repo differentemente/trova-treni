@@ -191,56 +191,16 @@ function componiRisposta(d, origine, destinazione, futura = false) {
     return json(200, { disponibile: false, soppresso: true, motivo: 'treno soppresso' })
   }
 
-  // "Non partito" NON può basarsi solo su oraUltimoRilevamento /
-  // stazioneUltimoRilevamento: ViaggiaTreno a volte lascia quei campi vuoti
-  // anche per treni chiaramente in viaggio (con orari effettivi nelle fermate).
-  // Verità di base: il treno è PARTITO se una qualsiasi fermata ha un orario
-  // reale registrato (arrivo o partenza effettivi).
-  const haRilevamentiFermate = Array.isArray(d.fermate)
-    ? d.fermate.some((f) => f.partenzaReale != null || f.arrivoReale != null)
-    : false
-  const rilevamentoGlobaleAssente =
-    d.oraUltimoRilevamento == null || d.stazioneUltimoRilevamento === '--'
-  // non partito solo se NON c'è nessun rilevamento, né globale né per fermata
-  const nonPartito = rilevamentoGlobaleAssente && !haRilevamentiFermate
-
-  // Ritardo dichiarato da ViaggiaTreno (globale sul treno)
-  let ritardoMin = futura ? 0 : typeof d.ritardo === 'number' ? d.ritardo : 0
-
-  // Se il treno NON è ancora partito ma l'orario teorico di partenza è già
-  // passato, il treno è di fatto in ritardo anche se ViaggiaTreno non lo dichiara
-  // ancora. Stimo il ritardo minimo come (adesso - partenza teorica).
-  // Es: teorica 13:00, ora 13:10, non partito => ritardo >= 10 min.
-  let ritardoStimatoNonPartito = 0
-  if (!futura && nonPartito) {
-    const partTeoTs = d.fermate?.[0]?.partenza_teorica
-    if (partTeoTs != null) {
-      const diffMin = Math.floor((Date.now() - Number(partTeoTs)) / 60000)
-      if (diffMin > 0) ritardoStimatoNonPartito = diffMin
-    }
-  }
-  // il ritardo effettivo del treno non partito è il maggiore tra quello
-  // dichiarato e quello stimato dallo scorrere del tempo
-  if (!futura && nonPartito && ritardoStimatoNonPartito > ritardoMin) {
-    ritardoMin = ritardoStimatoNonPartito
-  }
-
-  let stato
-  if (futura) stato = 'programmato'
-  else if (nonPartito && ritardoMin > 0) stato = 'non_partito_ritardo'
-  else if (nonPartito) stato = 'non_partito'
-  else if (ritardoMin <= 0) stato = 'in_orario'
-  else stato = 'ritardo'
-
-  let fermateComplete = d.fermate.map((f) => {
+  // --- Fermate dell'intera corsa ---
+  const fermateComplete = d.fermate.map((f) => {
     // in data futura ignoro qualsiasi dato reale: solo teorici
     const transitata = futura ? false : f.partenzaReale != null || f.arrivoReale != null
     const binEff = futura
       ? null
-      : pick(f.binarioEffettivoArrivoDescrizione) || pick(f.binarioEffettivoPartenzaDescrizione)
+      : pick(f.binarioEffettivoPartenzaDescrizione) || pick(f.binarioEffettivoArrivoDescrizione)
     const binProg =
-      pick(f.binarioProgrammatoArrivoDescrizione) ||
-      pick(f.binarioProgrammatoPartenzaDescrizione)
+      pick(f.binarioProgrammatoPartenzaDescrizione) ||
+      pick(f.binarioProgrammatoArrivoDescrizione)
     return {
       nome: f.stazione,
       teoricoArrivo: f.arrivo_teorico ?? null,
@@ -253,135 +213,176 @@ function componiRisposta(d, origine, destinazione, futura = false) {
       soppressa: f.actualFermataType === 3,
       transitata,
       tipo: f.tipoFermata,
+      proiezioneArrivo: null,
+      proiezionePartenza: null,
     }
   })
 
-  let fermate = fermateComplete
-
-  // --- Proiezione del ritardo sulle fermate non ancora raggiunte ---
-  // (saltata per le date future: non c'è ritardo da proiettare)
-  //
-  // Logica robusta: il ritardo da proiettare è quello REALE dell'ultima fermata
-  // transitata, calcolato come (orario effettivo - orario teorico). Non mi affido
-  // solo a f.ritardo perché ViaggiaTreno spesso non lo popola per fermata. Così
-  // se il treno recupera (o accumula) ritardo lungo la corsa, le proiezioni delle
-  // fermate successive si aggiornano di conseguenza invece di restare "congelate".
+  // --- ULTIMO RILEVAMENTO REALE del treno, su tutta la corsa ---
+  // Due fonti possibili, tengo la più recente:
+  //  A) i campi globali di ViaggiaTreno (stazione/ora ultimo rilevamento +
+  //     ritardo): possono riferirsi anche a un punto di solo transito, quindi
+  //     sono il dato più aggiornato quando ci sono;
+  //  B) l'ultima fermata con un orario reale (arrivo o partenza effettivi),
+  //     con il ritardo calcolato su quella fermata (effettivo - programmato).
+  // Il ritardo mostrato all'utente è SEMPRE quello misurato in questo punto.
+  let rilevamento = null
   if (!futura) {
-    // ritardo di partenza: se non partito uso il ritardo stimato/dichiarato
-    let ritardoCorrente = nonPartito ? ritardoMin : 0
+    let iUltima = -1
+    fermateComplete.forEach((f, i) => {
+      if (f.transitata) iUltima = i
+    })
 
-    for (const f of fermateComplete) {
-      if (f.transitata) {
-        // ritardo reale osservato in questa fermata:
-        // preferisco il delta effettivo-teorico (in partenza, poi in arrivo),
-        // e in mancanza ricado su f.ritardo dichiarato.
-        const dPart = deltaMin(f.effettivoPartenza, f.teoricoPartenza)
-        const dArr = deltaMin(f.effettivoArrivo, f.teoricoArrivo)
-        if (dPart != null) ritardoCorrente = dPart
-        else if (dArr != null) ritardoCorrente = dArr
-        else if (typeof f.ritardo === 'number') ritardoCorrente = f.ritardo
-        f.proiezioneArrivo = null
-        f.proiezionePartenza = null
-      } else {
-        // fermata futura: proietto il ritardo corrente sul teorico.
-        // Il ritardo non può scendere sotto 0 nella proiezione (un treno in
-        // orario non "arriva prima" del teorico per definizione di proiezione).
-        const r = ritardoCorrente > 0 ? ritardoCorrente : 0
-        f.proiezioneArrivo = r > 0 ? sommaMinuti(f.teoricoArrivo, r) : null
-        f.proiezionePartenza = r > 0 ? sommaMinuti(f.teoricoPartenza, r) : null
+    let daFermate = null
+    if (iUltima >= 0) {
+      const f = fermateComplete[iUltima]
+      const r =
+        deltaMin(f.effettivoPartenza, f.teoricoPartenza) ??
+        deltaMin(f.effettivoArrivo, f.teoricoArrivo) ??
+        (typeof f.ritardo === 'number' ? f.ritardo : 0)
+      daFermate = {
+        nome: f.nome,
+        ora: Number(f.effettivoPartenza ?? f.effettivoArrivo),
+        ritardo: r,
+        indice: iUltima,
       }
+    }
+
+    let daGlobale = null
+    if (d.oraUltimoRilevamento != null && pick(d.stazioneUltimoRilevamento)) {
+      const iG = fermateComplete.findIndex((f) => simili(f.nome, d.stazioneUltimoRilevamento))
+      daGlobale = {
+        nome: d.stazioneUltimoRilevamento,
+        ora: Number(d.oraUltimoRilevamento),
+        ritardo: typeof d.ritardo === 'number' ? d.ritardo : daFermate?.ritardo ?? 0,
+        indice: Math.max(iG, daFermate?.indice ?? -1),
+      }
+    }
+
+    if (daGlobale && daFermate) rilevamento = daGlobale.ora >= daFermate.ora ? daGlobale : daFermate
+    else rilevamento = daGlobale || daFermate
+  }
+  const inViaggio = !!rilevamento
+
+  // --- Treno mai rilevato: è ancora fermo al suo capolinea ---
+  // Qui NON uso il ritardo dichiarato a priori: se la partenza programmata dal
+  // capolinea è ancora nel futuro il treno non è in ritardo, punto. Solo se
+  // quell'orario è già passato e il treno non risulta partito, il ritardo è
+  // (adesso - partenza programmata), o quello dichiarato se maggiore.
+  const partenzaCapolinea = fermateComplete[0]?.teoricoPartenza ?? null
+  let ritardoNonPartito = 0
+  if (!futura && !inViaggio && partenzaCapolinea != null) {
+    const trascorsi = Math.floor((Date.now() - Number(partenzaCapolinea)) / 60000)
+    if (trascorsi > 0) {
+      const dichiarato = typeof d.ritardo === 'number' ? d.ritardo : 0
+      ritardoNonPartito = Math.max(trascorsi, dichiarato)
+    }
+  }
+
+  // --- Proiezione sulle fermate non ancora raggiunte ---
+  // Proietto il ritardo misurato all'ultimo rilevamento solo sulle fermate
+  // SUCCESSIVE a quel punto. Nessuna proiezione se il treno è in orario o se
+  // non è mai stato rilevato e la sua partenza è ancora futura.
+  if (!futura) {
+    const iUlt = inViaggio ? rilevamento.indice : -1
+    const rProj = inViaggio ? Math.max(0, rilevamento.ritardo) : ritardoNonPartito
+    if (rProj > 0) {
+      fermateComplete.forEach((f, i) => {
+        if (i < iUlt) return
+        if (i === iUlt) {
+          // fermata attuale: arrivato ma non ancora ripartito
+          if (f.effettivoArrivo != null && f.effettivoPartenza == null) {
+            f.proiezionePartenza = sommaMinuti(f.teoricoPartenza, rProj)
+          }
+          return
+        }
+        if (f.transitata) return
+        f.proiezioneArrivo = sommaMinuti(f.teoricoArrivo, rProj)
+        f.proiezionePartenza = sommaMinuti(f.teoricoPartenza, rProj)
+      })
     }
   }
 
   // --- Taglio al segmento richiesto: da "origine" a "destinazione" ---
+  let fermate = fermateComplete
   const iOrig = origine ? fermate.findIndex((f) => simili(f.nome, origine)) : 0
   const iDest = destinazione
     ? fermate.findIndex((f, idx) => idx >= (iOrig >= 0 ? iOrig : 0) && simili(f.nome, destinazione))
     : fermate.length - 1
 
-  let tagliata = false
+  let inizioSegmento = 0
   if (iOrig >= 0 && iDest >= 0 && iDest >= iOrig) {
     fermate = fermate.slice(iOrig, iDest + 1)
-    tagliata = true
+    inizioSegmento = iOrig
   }
 
-  // Cancellazione DENTRO il segmento che interessa all'utente
   const cancellataSulSegmento = fermate.some((f) => f.soppressa)
 
-  // Ultima fermata effettivamente transitata NEL SEGMENTO (ha un orario reale).
-  // È la fonte di verità su "dov'è il treno", più affidabile dei campi globali
-  // di ViaggiaTreno che a volte restano vuoti.
-  let ultimaTransitata = null
-  for (const f of fermate) {
-    if (f.effettivoPartenza != null || f.effettivoArrivo != null) ultimaTransitata = f
-  }
-
-  // Il segmento è "non partito" solo se la sua prima fermata non ha orari reali
-  const partenzaSegmento = fermate[0]
-  const segmentoNonPartito =
-    !partenzaSegmento ||
-    (partenzaSegmento.effettivoPartenza == null && partenzaSegmento.effettivoArrivo == null)
-
-  // --- Il treno è ARRIVATO a destinazione (dell'utente)? ---
-  // La destinazione è l'ultima fermata del segmento richiesto. Se ha già
-  // l'arrivo effettivo, per l'utente la corsa è conclusa: mostro "arrivato"
-  // con il ritardo REALE su quella fermata, non quello globale del treno
-  // (che continua fino al capolinea vero).
+  // --- Arrivato alla destinazione dell'utente? ---
+  // Conta il ritardo misurato su QUELLA fermata, non quello che il treno si
+  // porta fino al suo capolinea.
   const fermataArrivo = fermate[fermate.length - 1]
-  const arrivato =
-    !!fermataArrivo && fermataArrivo.effettivoArrivo != null && fermate.length > 0
-  // ritardo all'arrivo del segmento = effettivo - teorico sull'ultima fermata
+  const arrivato = !futura && !!fermataArrivo && fermataArrivo.effettivoArrivo != null
   let ritardoArrivo = null
   if (arrivato) {
     const d1 = deltaMin(fermataArrivo.effettivoArrivo, fermataArrivo.teoricoArrivo)
-    ritardoArrivo = d1 != null ? d1 : (typeof fermataArrivo.ritardo === 'number' ? fermataArrivo.ritardo : 0)
+    ritardoArrivo = d1 != null ? d1 : typeof fermataArrivo.ritardo === 'number' ? fermataArrivo.ritardo : 0
     if (ritardoArrivo < 0) ritardoArrivo = 0
   }
 
-  // Stato del segmento, coerente con i dati reali delle fermate:
-  // arrivato > cancellato > partito(in orario/ritardo) > non partito
-  let statoSegmento
-  if (futura) {
-    statoSegmento = 'programmato'
-  } else if (cancellataSulSegmento) {
-    statoSegmento = 'cancellato'
-  } else if (arrivato) {
-    statoSegmento = 'arrivato'
-  } else if (!segmentoNonPartito || ultimaTransitata) {
-    // treno partito e ancora in viaggio: in orario o in ritardo
-    statoSegmento = ritardoMin > 0 ? 'ritardo' : 'in_orario'
-  } else if (ritardoMin > 0) {
-    statoSegmento = 'non_partito_ritardo'
-  } else {
-    statoSegmento = 'non_partito'
-  }
+  // Il treno ha già raggiunto (o superato) la stazione dove sale l'utente?
+  const raggiuntaOrigineUtente =
+    !!fermate[0]?.transitata || (inViaggio && rilevamento.indice >= inizioSegmento)
 
-  // Nome dell'ultimo rilevamento: preferisco quello globale di ViaggiaTreno,
-  // ma se manca lo ricavo dall'ultima fermata transitata del segmento.
-  const nomeUltimoRilevamento =
-    (!rilevamentoGlobaleAssente ? d.stazioneUltimoRilevamento : null) ||
-    ultimaTransitata?.nome ||
-    null
+  // --- Stato mostrato all'utente ---
+  // programmato  : data futura
+  // cancellato   : fermate soppresse nella tratta dell'utente
+  // arrivato     : arrivato alla destinazione dell'utente
+  // ritardo / in_orario : in viaggio sulla tratta dell'utente
+  // in_arrivo    : in viaggio, ma non ancora arrivato alla stazione dell'utente
+  // non_partito_ritardo : mai rilevato e partenza programmata già passata
+  // non_partito  : mai rilevato, partenza ancora da venire (NESSUN ritardo)
+  let stato
+  let ritardoMin = 0
+  if (futura) {
+    stato = 'programmato'
+  } else if (cancellataSulSegmento) {
+    stato = 'cancellato'
+  } else if (arrivato) {
+    stato = 'arrivato'
+    ritardoMin = ritardoArrivo
+  } else if (raggiuntaOrigineUtente) {
+    ritardoMin = Math.max(0, rilevamento?.ritardo ?? 0)
+    stato = ritardoMin > 0 ? 'ritardo' : 'in_orario'
+  } else if (inViaggio) {
+    stato = 'in_arrivo'
+    ritardoMin = Math.max(0, rilevamento.ritardo)
+  } else if (ritardoNonPartito > 0) {
+    stato = 'non_partito_ritardo'
+    ritardoMin = ritardoNonPartito
+  } else {
+    stato = 'non_partito'
+  }
 
   return json(200, {
     disponibile: true,
     futura,
     soppresso: false,
     cancellatoSulSegmento: futura ? false : cancellataSulSegmento,
-    stato: statoSegmento,
+    stato,
     ritardoMin,
-    // info arrivo a destinazione (segmento dell'utente)
+    // ritardo grezzo all'ultimo rilevamento (negativo = anticipo)
+    ritardoRilevamento: rilevamento ? rilevamento.ritardo : null,
     arrivato,
     ritardoArrivo,
     oraArrivoEffettivo: arrivato ? fermataArrivo.effettivoArrivo : null,
     nomeArrivo: fermataArrivo?.nome ?? null,
-    ultimoRilevamento: futura ? null : nomeUltimoRilevamento,
-    oraUltimoRilevamento: futura
-      ? null
-      : d.oraUltimoRilevamento ??
-        ultimaTransitata?.effettivoPartenza ??
-        ultimaTransitata?.effettivoArrivo ??
-        null,
+    ultimoRilevamento: rilevamento ? rilevamento.nome : null,
+    oraUltimoRilevamento: rilevamento ? rilevamento.ora : null,
+    // stazione dove sale l'utente e relativa partenza programmata
+    stazioneUtente: fermate[0]?.nome ?? null,
+    partenzaProgrammataUtente: fermate[0]?.teoricoPartenza ?? null,
+    partenzaProgrammataCapolinea: partenzaCapolinea,
     partenza: fermate[0]?.nome ?? d.origine,
     arrivo: fermate[fermate.length - 1]?.nome ?? d.destinazione,
     fermate,

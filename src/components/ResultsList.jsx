@@ -85,6 +85,10 @@ function BadgeStato({ stato }) {
     return stato.ritardoArrivo > 0
       ? <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-800">arrivato +{stato.ritardoArrivo}&prime;</span>
       : <span className="rounded bg-green-100 px-1.5 py-0.5 text-[11px] font-medium text-green-800">arrivato</span>
+  if (stato.stato === 'in_arrivo')
+    return stato.ritardoMin > 0
+      ? <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-800">in arrivo · +{stato.ritardoMin}&prime;</span>
+      : <span className="rounded bg-green-100 px-1.5 py-0.5 text-[11px] font-medium text-green-800">in arrivo · in orario</span>
   if (stato.stato === 'non_partito_ritardo')
     return <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-800">non partito · +{stato.ritardoMin}&prime;</span>
   if (stato.stato === 'non_partito')

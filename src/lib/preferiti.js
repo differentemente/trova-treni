@@ -9,9 +9,11 @@
 
 const CHIAVE = 'trovatreni_preferiti_v1'
 
-// Margine dopo l'orario di arrivo teorico oltre il quale considero il treno
-// "concluso" e rimuovo il preferito (in minuti). Tiene conto di ritardi residui.
-const MARGINE_ARRIVO_MIN = 90
+// La rimozione principale avviene in tempo reale: appena ViaggiaTreno segnala
+// l'arrivo alla destinazione dell'utente, il preferito sparisce.
+// Questo margine è solo una RISERVA a tempo (treni non tracciati, o app
+// rimasta chiusa): arrivo programmato + ultimo ritardo noto + 30 minuti.
+const MARGINE_ARRIVO_MIN = 30
 
 // Legge tutti i preferiti grezzi dal localStorage
 function leggiRaw() {
@@ -65,7 +67,8 @@ function scaduto(p) {
   if (!yy || !mm || !gg) return false
 
   const arrivo = new Date(yy, mm - 1, gg, 0, 0, 0)
-  arrivo.setMinutes(arrivo.getMinutes() + arrivoMin + MARGINE_ARRIVO_MIN)
+  const ritardoNoto = Math.max(0, Number(p.ritardoNoto) || 0)
+  arrivo.setMinutes(arrivo.getMinutes() + arrivoMin + ritardoNoto + MARGINE_ARRIVO_MIN)
 
   return Date.now() > arrivo.getTime()
 }
@@ -114,6 +117,22 @@ export function rimuoviPreferito(grezzo) {
   const lista = leggiRaw().filter((x) => idPreferito(x) !== id)
   scrivi(lista)
   return lista
+}
+
+// Memorizza l'ultimo ritardo noto del treno: serve alla rimozione "di riserva"
+// per non cancellare un treno in forte ritardo prima che sia davvero arrivato.
+export function aggiornaRitardoPreferito(grezzo, ritardo) {
+  const id = idPreferito(normalizza(grezzo))
+  const r = Math.max(0, Number(ritardo) || 0)
+  const lista = leggiRaw()
+  let cambiato = false
+  for (const p of lista) {
+    if (idPreferito(p) === id && p.ritardoNoto !== r) {
+      p.ritardoNoto = r
+      cambiato = true
+    }
+  }
+  if (cambiato) scrivi(lista)
 }
 
 // Alterna: se c'è lo toglie, se non c'è lo aggiunge. Restituisce { attivo, lista }

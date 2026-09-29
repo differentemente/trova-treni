@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import TrattaTreno from './TrattaTreno'
-import { leggiPreferiti, rimuoviPreferito } from '../lib/preferiti'
+import { leggiPreferiti, rimuoviPreferito, aggiornaRitardoPreferito } from '../lib/preferiti'
 
 function ora(v) {
   if (!v) return '—'
@@ -32,6 +32,14 @@ function isOggi(g) {
 function CardPreferito({ pref, onRimuovi }) {
   // il treno è in una data futura se il giorno salvato non è oggi
   const futura = !isOggi(pref.giorno)
+
+  // Ogni aggiornamento dello stato: se il treno è arrivato alla destinazione
+  // dell'utente il preferito sparisce subito; altrimenti memorizzo il ritardo.
+  function suStato(s) {
+    if (!s?.disponibile) return
+    if (s.stato === 'arrivato') onRimuovi(pref)
+    else aggiornaRitardoPreferito(pref, s.ritardoMin)
+  }
 
   return (
     <div className="rounded-2xl bg-white shadow-sm border border-araldico-100">
@@ -72,6 +80,7 @@ function CardPreferito({ pref, onRimuovi }) {
         partenza={pref.partenza}
         arrivo={pref.orarioArrivo}
         futura={futura}
+        onStato={suStato}
         compatta
       />
     </div>

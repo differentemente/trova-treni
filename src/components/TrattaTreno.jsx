@@ -32,6 +32,10 @@ function etichettaStato(s) {
     return s.ritardoArrivo > 0
       ? { testo: `+${s.ritardoArrivo}`, sotto: 'arrivato', classe: 'bg-amber-100 text-amber-800' }
       : { testo: 'Arr.', sotto: 'in orario', classe: 'bg-green-100 text-green-800' }
+  if (s.stato === 'in_arrivo')
+    return s.ritardoMin > 0
+      ? { testo: `+${s.ritardoMin}`, sotto: 'in arrivo', classe: 'bg-amber-100 text-amber-800' }
+      : { testo: 'In', sotto: 'arrivo', classe: 'bg-green-100 text-green-800' }
   if (s.stato === 'non_partito_ritardo')
     return { testo: 'Non partito', sotto: `in ritardo di ${s.ritardoMin}′`, classe: 'bg-amber-100 text-amber-800' }
   if (s.stato === 'non_partito') return { testo: 'Non', sotto: 'partito', classe: 'bg-araldico-50 text-araldico-800' }
@@ -95,7 +99,8 @@ function Timeline({ primo, ultimo, raggiunta, attuale, prossimaRaggiunta }) {
 // Tabella fermate riusabile (stesso stile per segmento e tratta completa)
 function TabellaFermate({ fermate }) {
   const transitate = fermate.map((f) => f.transitata)
-  const indiceAttuale = Math.max(transitate.lastIndexOf(true), 0)
+  // -1 = il treno non ha ancora raggiunto nessuna di queste fermate
+  const indiceAttuale = transitate.lastIndexOf(true)
   return (
     <>
       <div className="grid grid-cols-[1.25rem_minmax(0,1fr)_2rem_2.9rem_2.9rem] items-end gap-x-1.5 pb-2 text-xs text-gray-400">
@@ -185,73 +190,76 @@ function PopupTratta({ titolo, fermate, onChiudi }) {
   )
 }
 
-// Box di stato ben leggibile per la vista preferiti: dice a colpo d'occhio se
-// il treno è in orario o in ritardo, di quanti minuti, e dov'è l'ultimo
-// rilevamento. Colori pieni per non lasciare dubbi.
+// Box di stato: dice a colpo d'occhio dov'è il treno (ultimo rilevamento
+// reale, stazione e ora) e se, IN QUEL PUNTO, è in orario o in ritardo.
+function rigaRilevamento(stato) {
+  if (!stato.ultimoRilevamento) return null
+  const o = oraTs(stato.oraUltimoRilevamento)
+  return `Ultimo rilevamento: ${stato.ultimoRilevamento}${o ? ` alle ${o}` : ''}`
+}
+
+const STILE = {
+  verde: { classe: 'border-green-300 bg-green-50 text-green-900', puntino: 'bg-green-500' },
+  ambra: { classe: 'border-amber-300 bg-amber-50 text-amber-900', puntino: 'bg-amber-500' },
+  rosso: { classe: 'border-red-200 bg-red-50 text-red-800', puntino: 'bg-red-500' },
+  neutro: { classe: 'border-araldico-200 bg-araldico-50 text-araldico-800', puntino: 'bg-araldico-300' },
+}
+
 function BoxStato({ stato }) {
-  let titolo, sottotitolo, classe, puntino
+  let titolo
+  let sottotitolo
+  let stile
+  const r = stato.ritardoMin || 0
+  const anticipo = stato.ritardoRilevamento != null && stato.ritardoRilevamento < 0 ? -stato.ritardoRilevamento : 0
 
   if (stato.futura) {
     titolo = 'Orari previsti'
     sottotitolo = 'Treno non ancora in viaggio'
-    classe = 'border-araldico-200 bg-araldico-50 text-araldico-800'
-    puntino = 'bg-araldico-400'
+    stile = STILE.neutro
   } else if (stato.stato === 'cancellato') {
     titolo = 'Treno cancellato'
     sottotitolo = 'Su questa tratta'
-    classe = 'border-red-200 bg-red-50 text-red-800'
-    puntino = 'bg-red-500'
+    stile = STILE.rosso
   } else if (stato.stato === 'arrivato') {
-    // treno arrivato alla destinazione dell'utente
     const oraArr = oraTs(stato.oraArrivoEffettivo)
-    if (stato.ritardoArrivo > 0) {
-      titolo = `Arrivato a destinazione con ${stato.ritardoArrivo} min di ritardo`
-      sottotitolo = oraArr ? `Arrivo a ${stato.nomeArrivo} alle ${oraArr}` : `Arrivo a ${stato.nomeArrivo}`
-      classe = 'border-amber-300 bg-amber-50 text-amber-900'
-      puntino = 'bg-amber-500'
-    } else {
-      titolo = 'Arrivato a destinazione in orario'
-      sottotitolo = oraArr ? `Arrivo a ${stato.nomeArrivo} alle ${oraArr}` : `Arrivo a ${stato.nomeArrivo}`
-      classe = 'border-green-300 bg-green-50 text-green-900'
-      puntino = 'bg-green-500'
-    }
+    titolo = stato.ritardoArrivo > 0
+      ? `Arrivato a destinazione con ${stato.ritardoArrivo} min di ritardo`
+      : 'Arrivato a destinazione in orario'
+    sottotitolo = oraArr ? `Arrivo a ${stato.nomeArrivo} alle ${oraArr}` : `Arrivo a ${stato.nomeArrivo}`
+    stile = stato.ritardoArrivo > 0 ? STILE.ambra : STILE.verde
+  } else if (stato.stato === 'in_arrivo') {
+    // in viaggio, ma non ancora arrivato alla stazione dell'utente
+    titolo = `In arrivo a ${stato.stazioneUtente} · ${r > 0 ? `in ritardo di ${r} min` : 'in orario'}`
+    sottotitolo = rigaRilevamento(stato)
+    stile = r > 0 ? STILE.ambra : STILE.verde
   } else if (stato.stato === 'non_partito_ritardo') {
-    titolo = `Non ancora partito · in ritardo di ${stato.ritardoMin} min`
-    sottotitolo = 'La partenza teorica è già passata'
-    classe = 'border-amber-300 bg-amber-50 text-amber-900'
-    puntino = 'bg-amber-500'
+    const oraProg = oraTs(stato.partenzaProgrammataCapolinea)
+    titolo = `Non ancora partito · in ritardo di ${r} min`
+    sottotitolo = `Partenza da ${stato.origineTreno} programmata alle ${oraProg}, non ancora avvenuta`
+    stile = STILE.ambra
   } else if (stato.stato === 'non_partito') {
-    titolo = 'Non ancora partito'
-    sottotitolo = 'In orario alla partenza'
-    classe = 'border-araldico-200 bg-araldico-50 text-araldico-800'
-    puntino = 'bg-araldico-400'
+    const oraProg = oraTs(stato.partenzaProgrammataUtente)
+    titolo = 'In attesa di partenza'
+    sottotitolo = oraProg
+      ? `Partenza da ${stato.stazioneUtente} programmata alle ${oraProg}`
+      : 'Il treno non è ancora stato rilevato'
+    stile = STILE.neutro
   } else if (stato.stato === 'in_orario') {
-    titolo = 'In orario'
-    sottotitolo = stato.ultimoRilevamento
-      ? `Ultimo rilevamento: ${stato.ultimoRilevamento}${
-          stato.oraUltimoRilevamento ? ` (${oraTs(stato.oraUltimoRilevamento)})` : ''
-        }`
-      : 'In viaggio'
-    classe = 'border-green-300 bg-green-50 text-green-900'
-    puntino = 'bg-green-500'
+    titolo = anticipo > 0 ? `In anticipo di ${anticipo} min` : 'In orario'
+    sottotitolo = rigaRilevamento(stato) || 'In viaggio'
+    stile = STILE.verde
   } else {
-    // ritardo
-    titolo = `In ritardo di ${stato.ritardoMin} min`
-    sottotitolo = stato.ultimoRilevamento
-      ? `Ultimo rilevamento: ${stato.ultimoRilevamento}${
-          stato.oraUltimoRilevamento ? ` (${oraTs(stato.oraUltimoRilevamento)})` : ''
-        }`
-      : 'In viaggio'
-    classe = 'border-amber-300 bg-amber-50 text-amber-900'
-    puntino = 'bg-amber-500'
+    titolo = `In ritardo di ${r} min`
+    sottotitolo = rigaRilevamento(stato) || 'In viaggio'
+    stile = STILE.ambra
   }
 
   return (
-    <div className={`flex items-start gap-2.5 rounded-xl border px-3 py-2.5 ${classe}`}>
-      <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${puntino}`} />
+    <div className={`flex items-start gap-2.5 rounded-xl border px-3 py-2.5 ${stile.classe}`}>
+      <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${stile.puntino}`} />
       <div className="min-w-0">
         <div className="text-sm font-bold leading-tight">{titolo}</div>
-        <div className="text-xs opacity-80">{sottotitolo}</div>
+        {sottotitolo && <div className="text-xs opacity-80">{sottotitolo}</div>}
       </div>
     </div>
   )
@@ -262,17 +270,26 @@ export default function TrattaTreno({ numero, origine, destinazione, partenza, a
   const [caricamento, setCaricamento] = useState(true)
   const [popup, setPopup] = useState(false)
 
+  // nei preferiti ricarico lo stato ogni 60 secondi, così il riquadro segue
+  // il treno in tempo reale e l'arrivo viene rilevato senza riaprire l'app
+  const [giro, setGiro] = useState(0)
+  useEffect(() => {
+    if (!compatta || futura) return
+    const t = setInterval(() => setGiro((g) => g + 1), 60000)
+    return () => clearInterval(t)
+  }, [compatta, futura])
+
   useEffect(() => {
     let vivo = true
-    setCaricamento(true)
+    if (giro === 0) setCaricamento(true) // solo al primo caricamento
     statoTreno({ numero, origine, destinazione, partenza, futura })
       .then((s) => {
         if (!vivo) return
         setStato(s)
-        if (onStato) onStato(s) // comunico lo stato al TabTreno per il badge
+        if (onStato) onStato(s) // comunico lo stato (badge / preferiti)
       })
       .catch(() => {
-        if (!vivo) return
+        if (!vivo || giro > 0) return // un aggiornamento fallito non cancella l'ultimo stato buono
         const errore = { disponibile: false, motivo: 'errore di rete' }
         setStato(errore)
         if (onStato) onStato(errore)
@@ -281,7 +298,7 @@ export default function TrattaTreno({ numero, origine, destinazione, partenza, a
     return () => {
       vivo = false
     }
-  }, [numero, origine, destinazione, partenza, futura])
+  }, [numero, origine, destinazione, partenza, futura, giro])
 
   if (caricamento) {
     return <div className="px-4 py-4 text-sm text-araldico-500">Carico stato treno…</div>
