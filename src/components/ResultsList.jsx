@@ -98,6 +98,19 @@ function BadgeStato({ stato }) {
   return <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-800">+{stato.ritardoMin}&prime;</span>
 }
 
+// true se la partenza cade in un giorno successivo a oggi (ora locale)
+// e mancano più di 3 ore: è una corsa di domani, non ancora in circolazione.
+function partenzaGiornoSuccessivo(iso) {
+  if (!iso) return false
+  const p = new Date(iso)
+  if (isNaN(p)) return false
+  const oggi = new Date()
+  const giornoP = new Date(p.getFullYear(), p.getMonth(), p.getDate()).getTime()
+  const giornoOggi = new Date(oggi.getFullYear(), oggi.getMonth(), oggi.getDate()).getTime()
+  const mancanoOre = (p.getTime() - oggi.getTime()) / 3600000
+  return giornoP > giornoOggi && mancanoOre > 3
+}
+
 // Tab di un singolo treno della soluzione.
 // Il badge di stato NON viene caricato automaticamente (risparmio chiamate):
 // lo stato arriva da TrattaTreno (via onStato) solo quando apri il tab.
@@ -113,9 +126,13 @@ function TabTreno({ treno, dataFutura }) {
   // successivo ad adesso. Copre il caso: cerco stasera (22:43) e mi escono corse
   // del mattino dopo (06:43) — quelle vanno mostrate con orari teorici previsti,
   // non cercate in tempo reale (che ViaggiaTreno non ha ancora per domani).
-  const partenzaDate = treno.partenza ? new Date(treno.partenza) : null
-  const treniFuturo = partenzaDate && !isNaN(partenzaDate) && partenzaDate.getTime() > Date.now()
-  const usaFutura = dataFutura || treniFuturo
+  // Un treno va trattato come "futuro" (solo orari programmati, niente tempo
+  // reale) SOLO se parte in un GIORNO successivo a oggi. Non basta che parta
+  // più tardi di adesso: un treno che passa dalla tua stazione fra 10 minuti
+  // è quasi sempre già in viaggio da un'altra città e va seguito in tempo reale.
+  // Eccezione: le corse a cavallo della mezzanotte (partenza domani entro 3 ore)
+  // restano in tempo reale, perché a monte possono essere già partite oggi.
+  const usaFutura = dataFutura || partenzaGiornoSuccessivo(treno.partenza)
 
   return (
     <div className={`overflow-hidden rounded-xl border ${cancellato ? 'border-red-200' : 'border-araldico-100'}`}>

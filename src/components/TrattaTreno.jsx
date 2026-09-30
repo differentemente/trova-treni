@@ -190,6 +190,123 @@ function PopupTratta({ titolo, fermate, onChiudi }) {
   )
 }
 
+// ---------------------------------------------------------------------------
+// Countdown con binario in evidenza (vista preferiti).
+// Prima della partenza: "Parte tra 7 min · Binario 6", che diventa
+// "In partenza" nell'ultimo minuto. Dopo la partenza dalla stazione
+// dell'utente passa al conto alla rovescia dell'arrivo a destinazione.
+
+// orologio locale che si aggiorna da solo (il countdown scorre tra un
+// aggiornamento dei dati e l'altro)
+function useAdesso(intervallo = 15000) {
+  const [t, setT] = useState(Date.now())
+  useEffect(() => {
+    const id = setInterval(() => setT(Date.now()), intervallo)
+    return () => clearInterval(id)
+  }, [intervallo])
+  return t
+}
+
+function tempoMancante(ms) {
+  const min = Math.max(1, Math.ceil(ms / 60000))
+  if (min < 60) return `${min} min`
+  const h = Math.floor(min / 60)
+  const r = min % 60
+  return r ? `${h} h ${r} min` : `${h} h`
+}
+
+function Countdown({ partenzaTs, partito, arrivoTs, nomeArrivo, binPart, binPartConf, binArr, binArrConf }) {
+  const adesso = useAdesso()
+  let etichetta = null
+  let valore
+  let binario
+  let confermato
+  let urgente = false
+
+  if (!partito) {
+    if (!partenzaTs) return null
+    const diff = partenzaTs - adesso
+    binario = binPart
+    confermato = binPartConf
+    if (diff <= 60000) {
+      valore = 'In partenza'
+      urgente = true
+    } else {
+      etichetta = 'Parte tra'
+      valore = tempoMancante(diff)
+    }
+  } else {
+    if (!arrivoTs) return null
+    const diff = arrivoTs - adesso
+    if (diff < -120000) return null // già arrivato
+    binario = binArr
+    confermato = binArrConf
+    if (diff <= 60000) {
+      etichetta = nomeArrivo ? `A ${nomeArrivo}` : null
+      valore = 'In arrivo'
+      urgente = true
+    } else {
+      etichetta = nomeArrivo ? `Arrivo a ${nomeArrivo} tra` : 'Arrivo tra'
+      valore = tempoMancante(diff)
+    }
+  }
+
+  const binLungo = binario && String(binario).length > 3
+  return (
+    <div className="mb-3 flex items-stretch overflow-hidden rounded-xl bg-araldico-700 text-white shadow-sm">
+      <div className="min-w-0 flex-1 px-4 py-3">
+        {etichetta && (
+          <div className="break-words text-[11px] font-medium uppercase tracking-wide text-white/70">
+            {etichetta}
+          </div>
+        )}
+        <div className={`text-3xl font-bold leading-tight tabular-nums ${urgente ? 'animate-pulse' : ''}`}>
+          {valore}
+        </div>
+      </div>
+      {binario && (
+        <div className="flex min-w-[5.5rem] flex-col items-center justify-center bg-white/10 px-3 py-2 text-center">
+          <div className="text-[11px] font-medium uppercase tracking-wide text-white/70">Binario</div>
+          <div className={`${binLungo ? 'text-lg' : 'text-3xl'} font-bold leading-tight`}>{binario}</div>
+          {!confermato && <div className="text-[10px] text-white/60">previsto</div>}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Countdown calcolato dallo stato in tempo reale del treno
+function CountdownDaStato({ stato }) {
+  const f0 = stato.fermate?.[0]
+  const fN = stato.fermate?.[stato.fermate.length - 1]
+  if (!f0) return null
+  const partito = f0.effettivoPartenza != null
+  const partenzaTs = Number(f0.proiezionePartenza ?? f0.teoricoPartenza) || null
+  const arrivoTs = fN && fN !== f0 ? Number(fN.effettivoArrivo ?? fN.proiezioneArrivo ?? fN.teoricoArrivo) || null : null
+  return (
+    <Countdown
+      partenzaTs={partenzaTs}
+      partito={partito}
+      arrivoTs={arrivoTs}
+      nomeArrivo={fN?.nome}
+      binPart={f0.binario}
+      binPartConf={f0.binarioConfermato}
+      binArr={fN?.binario}
+      binArrConf={fN?.binarioConfermato}
+    />
+  )
+}
+
+// Countdown dai soli orari programmati (treno non tracciato da ViaggiaTreno)
+function CountdownDaOrari({ partenza, arrivo, destinazione }) {
+  const adesso = useAdesso()
+  const p = Date.parse(partenza)
+  const a = Date.parse(arrivo)
+  if (isNaN(p)) return null
+  const partito = adesso > p + 120000
+  return <Countdown partenzaTs={p} partito={partito} arrivoTs={isNaN(a) ? null : a} nomeArrivo={destinazione} />
+}
+
 // Box di stato: dice a colpo d'occhio dov'è il treno (ultimo rilevamento
 // reale, stazione e ora) e se, IN QUEL PUNTO, è in orario o in ritardo.
 function rigaRilevamento(stato) {
@@ -265,7 +382,18 @@ function BoxStato({ stato }) {
   )
 }
 
-export default function TrattaTreno({ numero, origine, destinazione, partenza, arrivo, futura, onStato, compatta = false }) {
+export default function TrattaTreno({
+  numero,
+  origine,
+  destinazione,
+  partenza,
+  arrivo,
+  futura,
+  onStato,
+  compatta = false,
+  conCountdown = false, // countdown partenza/arrivo (solo nei preferiti)
+  codice, // ricerca per numero: codice stazione del treno scelto tra gli omonimi
+}) {
   const [stato, setStato] = useState(null)
   const [caricamento, setCaricamento] = useState(true)
   const [popup, setPopup] = useState(false)
@@ -282,7 +410,7 @@ export default function TrattaTreno({ numero, origine, destinazione, partenza, a
   useEffect(() => {
     let vivo = true
     if (giro === 0) setCaricamento(true) // solo al primo caricamento
-    statoTreno({ numero, origine, destinazione, partenza, futura })
+    statoTreno({ numero, origine, destinazione, partenza, futura, codice })
       .then((s) => {
         if (!vivo) return
         setStato(s)
@@ -298,19 +426,32 @@ export default function TrattaTreno({ numero, origine, destinazione, partenza, a
     return () => {
       vivo = false
     }
-  }, [numero, origine, destinazione, partenza, futura, giro])
+  }, [numero, origine, destinazione, partenza, futura, codice, giro])
 
   if (caricamento) {
     return <div className="px-4 py-4 text-sm text-araldico-500">Carico stato treno…</div>
   }
 
   if (!stato?.disponibile || !stato.fermate?.length) {
+    // ricerca per numero: non ho una tratta di riferimento da mostrare
+    if (!origine && !destinazione) {
+      return (
+        <div className="px-4 py-4 text-sm text-araldico-600">
+          {stato?.soppresso
+            ? 'Il treno risulta soppresso.'
+            : 'Al momento ViaggiaTreno non fornisce dati su questo treno. Riprova tra qualche minuto.'}
+        </div>
+      )
+    }
     // Percorso completo non disponibile (treno non in circolazione: corsa
     // conclusa o data futura). Invece di un messaggio vuoto, mostro gli estremi
     // della tratta con gli orari teorici che abbiamo dalla ricerca. Le fermate
     // intermedie non sono ottenibili in questo caso (limite delle fonti).
     return (
       <div className={compatta ? 'bg-white px-3 pb-3 pt-1' : 'border-t border-araldico-100 bg-white px-3 pb-3 pt-3'}>
+        {conCountdown && !futura && (
+          <CountdownDaOrari partenza={partenza} arrivo={arrivo} destinazione={destinazione} />
+        )}
         <div className="rounded-xl border border-araldico-100 bg-araldico-50/40 px-3 py-3">
           <div className="mb-1 text-xs font-medium uppercase tracking-wide text-araldico-500">
             Orari previsti
@@ -344,6 +485,9 @@ export default function TrattaTreno({ numero, origine, destinazione, partenza, a
         /* Versione compatta (preferiti): box di stato chiaro, poi divisorio,
            poi la tabella fermate, poi il pulsante per il percorso intero. */
         <>
+          {conCountdown && !stato.futura && !['cancellato', 'arrivato'].includes(stato.stato) && (
+            <CountdownDaStato stato={stato} />
+          )}
           <BoxStato stato={stato} />
           {stato.cancellatoSulSegmento && (
             <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">

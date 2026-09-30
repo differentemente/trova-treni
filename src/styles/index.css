@@ -5,3 +5,78 @@
 body {
   @apply bg-crema text-araldico-900 antialiased;
 }
+
+/* ==========================================================================
+   TEMA SCURO
+   Si attiva SOLO se l'iPhone (o il dispositivo) è impostato in modalità
+   scura. In modalità chiara questo blocco viene ignorato e l'app resta
+   identica a prima. Rimappo i colori usati nei componenti su una tavolozza
+   notturna che mantiene il verde araldico come colore principale.
+   ========================================================================== */
+@media (prefers-color-scheme: dark) {
+  :root { color-scheme: dark; }
+
+  body { background-color: #0e1411; color: #e6efe9; }
+
+  /* superfici */
+  .bg-white { background-color: #16201b; }
+  .bg-crema { background-color: #0e1411; }
+  .bg-araldico-50 { background-color: #1b2a22; }
+  .bg-araldico-50\/50, .bg-araldico-50\/40 { background-color: rgba(27, 42, 34, 0.7); }
+  .bg-araldico-100 { background-color: #22382c; }
+  .bg-araldico-300 { background-color: #3f6a54; }
+  .bg-gray-100 { background-color: #232a27; }
+  .bg-gray-300 { background-color: #3a423e; }
+  .bg-black\/40 { background-color: rgba(0, 0, 0, 0.6); }
+  .hover\:bg-araldico-50:hover { background-color: #1f3127; }
+  .hover\:bg-araldico-100:hover { background-color: #27402f; }
+  .hover\:bg-gray-200:hover { background-color: #2d3531; }
+  /* pallino dell'interruttore "Solo treni diretti": resta chiaro */
+  .h-4.w-4.rounded-full.bg-white { background-color: #e6efe9; }
+
+  /* bordi */
+  .border-araldico-100 { border-color: #26372e; }
+  .border-araldico-200 { border-color: #2f463a; }
+  .border-araldico-300, .hover\:border-araldico-300:hover { border-color: #3f5a4b; }
+  .border-araldico-500, .focus\:border-araldico-500:focus { border-color: #4f9d74; }
+  .border-gray-200 { border-color: #2b3430; }
+  .ring-araldico-100 { --tw-ring-color: #22382c; }
+  .focus\:ring-araldico-500:focus { --tw-ring-color: #4f9d74; }
+
+  /* testi verdi: da scuri a chiari, per restare leggibili sul fondo scuro */
+  .text-araldico-900 { color: #eef5f0; }
+  .text-araldico-800 { color: #d4e6db; }
+  .text-araldico-700 { color: #8fd1ac; }
+  .text-araldico-600 { color: #7cc39c; }
+  .text-araldico-500 { color: #6aa987; }
+  .text-araldico-400 { color: #5b8f73; }
+  .text-araldico-300 { color: #4d7a62; }
+  .text-araldico-200 { color: #3b5c4a; }
+
+  /* grigi */
+  .text-gray-900 { color: #e5e7eb; }
+  .text-gray-600 { color: #b8bec6; }
+  .text-gray-500 { color: #9aa1a9; }
+  .text-gray-400 { color: #7d848c; }
+  .text-gray-300 { color: #5b6168; }
+
+  /* riquadri di stato: verde (in orario), ambra (ritardo), rosso (cancellato) */
+  .bg-green-50 { background-color: rgba(34, 197, 94, 0.1); }
+  .bg-green-100 { background-color: rgba(34, 197, 94, 0.18); }
+  .border-green-300 { border-color: rgba(74, 222, 128, 0.35); }
+  .text-green-900, .text-green-800 { color: #bbf7d0; }
+  .text-green-700 { color: #4ade80; }
+
+  .bg-amber-50 { background-color: rgba(245, 158, 11, 0.1); }
+  .bg-amber-100 { background-color: rgba(245, 158, 11, 0.18); }
+  .border-amber-300 { border-color: rgba(252, 211, 77, 0.35); }
+  .text-amber-900 { color: #fde68a; }
+  .text-amber-800 { color: #fcd34d; }
+  .text-amber-600 { color: #fbbf24; }
+
+  .bg-red-50 { background-color: rgba(239, 68, 68, 0.1); }
+  .bg-red-100, .hover\:bg-red-100:hover { background-color: rgba(239, 68, 68, 0.18); }
+  .border-red-200 { border-color: rgba(248, 113, 113, 0.35); }
+  .text-red-800 { color: #fecaca; }
+  .text-red-700, .text-red-600 { color: #f87171; }
+}

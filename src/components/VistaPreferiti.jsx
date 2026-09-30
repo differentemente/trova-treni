@@ -42,7 +42,7 @@ function CardPreferito({ pref, onRimuovi }) {
   }
 
   return (
-    <div className="rounded-2xl bg-white shadow-sm border border-araldico-100">
+    <div className="overflow-hidden rounded-2xl bg-white shadow-sm border border-araldico-100">
       <div className="flex items-center justify-between gap-2 px-4 pt-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -82,6 +82,7 @@ function CardPreferito({ pref, onRimuovi }) {
         futura={futura}
         onStato={suStato}
         compatta
+        conCountdown
       />
     </div>
   )

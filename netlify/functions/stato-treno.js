@@ -36,7 +36,29 @@ export async function handler(event) {
     const autoRes = await fetch(autoUrl, { headers: { 'User-Agent': UA } })
     const autoText = await autoRes.text()
 
-    const candidati = parseAutocomplete(autoText) // [{ nome, codice, ts }]
+    let candidati = parseAutocomplete(autoText) // [{ nome, codice, ts }]
+
+    // Ricerca per numero: ?elenco=1 restituisce solo i treni che hanno quel
+    // numero oggi (lo stesso numero può indicare treni diversi in Italia),
+    // così l'utente sceglie quello giusto dalla stazione di origine.
+    if ((p.elenco || '') === '1') {
+      const visti = new Set()
+      const elenco = candidati.filter((c) => {
+        const k = `${c.codice}|${c.ts}`
+        if (visti.has(k)) return false
+        visti.add(k)
+        return true
+      })
+      return json(200, { candidati: elenco })
+    }
+
+    // ?codice=S02430 : l'utente ha scelto un treno preciso tra gli omonimi
+    const codiceScelto = (p.codice || '').trim()
+    if (codiceScelto) {
+      const filtrati = candidati.filter((c) => c.codice === codiceScelto)
+      if (filtrati.length > 0) candidati = filtrati
+    }
+
     if (candidati.length === 0) {
       return json(200, {
         disponibile: false,
@@ -390,6 +412,11 @@ function componiRisposta(d, origine, destinazione, futura = false) {
     fermateComplete,
     origineTreno: d.origine,
     destinazioneTreno: d.destinazione,
+    // es. "FR 9718" (serve alla ricerca per numero)
+    nomeTreno:
+      pick(d.compNumeroTreno) ||
+      [pick(d.categoria), d.numeroTreno].filter(Boolean).join(' ') ||
+      null,
   })
 }
 

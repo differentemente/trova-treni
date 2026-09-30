@@ -3,6 +3,7 @@ import SearchForm from './components/SearchForm'
 import ResultsList from './components/ResultsList'
 import TabBar from './components/TabBar'
 import VistaPreferiti from './components/VistaPreferiti'
+import VistaNumeroTreno from './components/VistaNumeroTreno'
 import BottoneCaffe from './components/BottoneCaffe'
 import { cercaViaggio, cercaItalo } from './lib/api'
 import { leggiPreferiti } from './lib/preferiti'
@@ -38,7 +39,7 @@ export default function App() {
   // orario della soluzione più "vecchia" mostrata, per i treni precedenti
   const [orarioPiuVecchio, setOrarioPiuVecchio] = useState(null)
   const [dataFutura, setDataFutura] = useState(false)
-  // vista corrente: 'ricerca' | 'preferiti'
+  // vista corrente: 'ricerca' | 'preferiti' | 'numero'
   const [vista, setVista] = useState('ricerca')
   const [numPreferiti, setNumPreferiti] = useState(0)
 
@@ -130,9 +131,9 @@ export default function App() {
 
   return (
     // padding-top con safe-area per non finire sotto la notch/Dynamic Island;
-    // pb-28 lascia spazio in fondo così il FAB non copre gli ultimi contenuti
+    // pb-40 lascia spazio in fondo così i due pulsanti tondi non coprono gli ultimi contenuti
     <div
-      className="mx-auto max-w-xl px-4 pb-28"
+      className="mx-auto max-w-xl px-4 pb-40"
       style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 1.5rem)' }}
     >
       <header className="relative mb-5 flex flex-col items-center gap-2 text-center">
@@ -174,8 +175,10 @@ export default function App() {
             onCambioPreferiti={setNumPreferiti}
           />
         </>
-      ) : (
+      ) : vista === 'preferiti' ? (
         <VistaPreferiti onCambio={setNumPreferiti} />
+      ) : (
+        <VistaNumeroTreno />
       )}
 
       <TabBar
@@ -185,6 +188,7 @@ export default function App() {
           setNumPreferiti(leggiPreferiti().length) // aggiorna conteggio e pulisce
           setVista('preferiti')
         }}
+        onApriNumero={() => setVista('numero')}
         onChiudi={() => setVista('ricerca')}
       />
     </div>

@@ -34,8 +34,9 @@ export async function stazioneVicina(lat, lng) {
 }
 // Stato treno in tempo reale. Passo anche destinazione e orario di partenza
 // per disambiguare i numeri treno duplicati in Italia.
-export async function statoTreno({ numero, origine, destinazione, partenza, futura }) {
+export async function statoTreno({ numero, origine, destinazione, partenza, futura, codice }) {
   const params = new URLSearchParams({ numero: String(numero) })
+  if (codice) params.set('codice', codice)
   if (origine) params.set('origine', origine)
   if (destinazione) params.set('destinazione', destinazione)
   if (partenza) params.set('partenza', partenza)
@@ -43,4 +44,13 @@ export async function statoTreno({ numero, origine, destinazione, partenza, futu
   const res = await fetch(`/api/stato-treno?${params}`)
   if (!res.ok) throw new Error('Errore stato treno')
   return res.json()
+}
+
+// Ricerca per numero: elenco dei treni che oggi hanno quel numero
+// (in Italia lo stesso numero può identificare treni diversi).
+export async function elencoTreniPerNumero(numero) {
+  const res = await fetch(`/api/stato-treno?numero=${encodeURIComponent(numero)}&elenco=1`)
+  if (!res.ok) throw new Error('Errore ricerca treno')
+  const data = await res.json()
+  return data.candidati || [] // [{ nome, codice, ts }]
 }
