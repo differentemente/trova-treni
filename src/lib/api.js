@@ -54,3 +54,13 @@ export async function elencoTreniPerNumero(numero) {
   const data = await res.json()
   return data.candidati || [] // [{ nome, codice, ts }]
 }
+
+// Tabellone partenze di una stazione (id LeFrecce o codice S0xxxx)
+export async function partenzeStazione({ id, codice }) {
+  const params = new URLSearchParams()
+  if (codice) params.set('codice', codice)
+  else params.set('id', String(id))
+  const res = await fetch(`/api/partenze?${params}`)
+  if (!res.ok) throw new Error('Errore tabellone')
+  return res.json() // { codice, aggiornato, treni: [...] }
+}

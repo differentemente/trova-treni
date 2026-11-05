@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import TrattaTreno from './TrattaTreno'
 import { elencoTreniPerNumero } from '../lib/api'
 
@@ -6,7 +6,7 @@ import { elencoTreniPerNumero } from '../lib/api'
 // misurato all'ultimo rilevamento e l'intero percorso con tutte le fermate.
 // In Italia lo stesso numero può indicare treni diversi: in quel caso chiedo
 // all'utente quale, in base alla stazione di partenza.
-export default function VistaNumeroTreno() {
+export default function VistaNumeroTreno({ richiesta, attiva = true }) {
   const [numero, setNumero] = useState('')
   const [cercando, setCercando] = useState(false)
   const [errore, setErrore] = useState('')
@@ -43,10 +43,22 @@ export default function VistaNumeroTreno() {
     setScelto({ numero: numero.replace(/\D/g, ''), codice: c.codice, nome: c.nome })
   }
 
+  // treno toccato sul tabellone partenze: lo apro direttamente
+  useEffect(() => {
+    if (!richiesta?.numero) return
+    const n = String(richiesta.numero).replace(/\D/g, '')
+    setNumero(n)
+    setErrore('')
+    setCandidati([])
+    setInfo(null)
+    setScelto({ numero: n, codice: richiesta.codice || undefined, nome: richiesta.origine || '' })
+  }, [richiesta?.quando])
+
   const piuTreni = candidati && candidati.length > 1
 
   return (
     <div className="mt-2 space-y-3">
+      <h2 className="px-1 text-2xl font-bold text-araldico-800">Cerca un treno</h2>
       <form
         onSubmit={cerca}
         className="rounded-2xl border border-araldico-100 bg-white p-4 shadow-sm"
@@ -125,7 +137,9 @@ export default function VistaNumeroTreno() {
             <div className="mt-1 text-sm text-araldico-700">
               {info?.disponibile
                 ? `${info.origineTreno} → ${info.destinazioneTreno}`
-                : `Parte da ${scelto.nome}`}
+                : scelto.nome
+                  ? `Parte da ${scelto.nome}`
+                  : 'Carico il percorso…'}
             </div>
           </div>
           <div className="mx-4 mt-3 h-px bg-araldico-100" />
@@ -135,6 +149,7 @@ export default function VistaNumeroTreno() {
             codice={scelto.codice}
             onStato={setInfo}
             compatta
+            inPausa={!attiva}
           />
         </div>
       )}

@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import { cercaStazione, stazioneVicina } from '../lib/api'
 import { leggiCronologia, aggiungiRicerca } from '../lib/cronologia'
 
-// Campo stazione con autocomplete (debounce 300ms sugli id LeFrecce)
-function CampoStazione({ label, value, onSelect }) {
+// Campo stazione con autocomplete (debounce 300ms sugli id LeFrecce).
+// Esportato perché lo usa anche il tabellone partenze (con soloStazioni:
+// niente voci "tutte le stazioni", che non hanno un tabellone).
+export function CampoStazione({ label, value, onSelect, soloStazioni = false }) {
   const [testo, setTesto] = useState(value?.name || '')
   const [opzioni, setOpzioni] = useState([])
   const [aperto, setAperto] = useState(false)
@@ -36,8 +38,9 @@ function CampoStazione({ label, value, onSelect }) {
     timer.current = setTimeout(async () => {
       try {
         const stazioni = await cercaStazione(t.trim())
-        stazioni.sort((x, y) => Number(y.multistation) - Number(x.multistation))
-        setOpzioni(stazioni.slice(0, 8))
+        const elenco = soloStazioni ? stazioni.filter((s) => !s.multistation) : stazioni
+        elenco.sort((x, y) => Number(y.multistation) - Number(x.multistation))
+        setOpzioni(elenco.slice(0, 8))
         setAperto(true)
       } catch {
         setOpzioni([])

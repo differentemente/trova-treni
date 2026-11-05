@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { statoTreno } from '../lib/api'
 
 function oraTs(ts) {
@@ -215,38 +215,69 @@ function tempoMancante(ms) {
   return r ? `${h} h ${r} min` : `${h} h`
 }
 
-function Countdown({ partenzaTs, partito, arrivoTs, nomeArrivo, binPart, binPartConf, binArr, binArrConf }) {
+// Riga sotto il countdown: dice SEMPRE a che ora è attesa la partenza (o
+// l'arrivo) e, se c'è ritardo, rispetto a quale orario programmato. Così il
+// tempo mancante non sembra mai in contraddizione con il ritardo.
+function rigaOrario(stimaTs, progTs, inTempoReale) {
+  const stima = oraTs(stimaTs)
+  const prog = oraTs(progTs)
+  if (!stima) return null
+  const ritardo = progTs ? Math.round((stimaTs - progTs) / 60000) : 0
+  if (ritardo > 0 && prog) return `alle ${stima} anziché ${prog} (+${ritardo} min)`
+  if (!inTempoReale) return `alle ${stima} · orario programmato`
+  return `alle ${stima} · in orario`
+}
+
+function Countdown({
+  partenzaTs,
+  partenzaProgTs,
+  partito,
+  arrivoTs,
+  arrivoProgTs,
+  nomeArrivo,
+  binPart,
+  binPartConf,
+  binArr,
+  binArrConf,
+  inTempoReale,
+}) {
   const adesso = useAdesso()
   let etichetta = null
   let valore
   let binario
   let confermato
+  let dettaglio
   let urgente = false
 
   if (!partito) {
     if (!partenzaTs) return null
     const diff = partenzaTs - adesso
+    const inRitardo = partenzaProgTs && partenzaTs - partenzaProgTs >= 60000
     binario = binPart
     confermato = binPartConf
+    dettaglio = rigaOrario(partenzaTs, partenzaProgTs, inTempoReale)
     if (diff <= 60000) {
       valore = 'In partenza'
       urgente = true
     } else {
-      etichetta = 'Parte tra'
+      etichetta = inRitardo ? 'Partenza stimata tra' : 'Parte tra'
       valore = tempoMancante(diff)
     }
   } else {
     if (!arrivoTs) return null
     const diff = arrivoTs - adesso
     if (diff < -120000) return null // già arrivato
+    const inRitardo = arrivoProgTs && arrivoTs - arrivoProgTs >= 60000
     binario = binArr
     confermato = binArrConf
+    dettaglio = rigaOrario(arrivoTs, arrivoProgTs, inTempoReale)
     if (diff <= 60000) {
       etichetta = nomeArrivo ? `A ${nomeArrivo}` : null
       valore = 'In arrivo'
       urgente = true
     } else {
-      etichetta = nomeArrivo ? `Arrivo a ${nomeArrivo} tra` : 'Arrivo tra'
+      const cosa = inRitardo ? 'Arrivo stimato' : 'Arrivo'
+      etichetta = nomeArrivo ? `${cosa} a ${nomeArrivo} tra` : `${cosa} tra`
       valore = tempoMancante(diff)
     }
   }
@@ -263,6 +294,7 @@ function Countdown({ partenzaTs, partito, arrivoTs, nomeArrivo, binPart, binPart
         <div className={`text-3xl font-bold leading-tight tabular-nums ${urgente ? 'animate-pulse' : ''}`}>
           {valore}
         </div>
+        {dettaglio && <div className="mt-0.5 text-xs tabular-nums text-white/70">{dettaglio}</div>}
       </div>
       {binario && (
         <div className="flex min-w-[5.5rem] flex-col items-center justify-center bg-white/10 px-3 py-2 text-center">
@@ -283,16 +315,21 @@ function CountdownDaStato({ stato }) {
   const partito = f0.effettivoPartenza != null
   const partenzaTs = Number(f0.proiezionePartenza ?? f0.teoricoPartenza) || null
   const arrivoTs = fN && fN !== f0 ? Number(fN.effettivoArrivo ?? fN.proiezioneArrivo ?? fN.teoricoArrivo) || null : null
+  // "in tempo reale" = il treno è già stato rilevato da qualche parte
+  const inTempoReale = !!stato.ultimoRilevamento
   return (
     <Countdown
       partenzaTs={partenzaTs}
+      partenzaProgTs={Number(f0.teoricoPartenza) || null}
       partito={partito}
       arrivoTs={arrivoTs}
+      arrivoProgTs={fN ? Number(fN.teoricoArrivo) || null : null}
       nomeArrivo={fN?.nome}
       binPart={f0.binario}
       binPartConf={f0.binarioConfermato}
       binArr={fN?.binario}
       binArrConf={fN?.binarioConfermato}
+      inTempoReale={inTempoReale}
     />
   )
 }
@@ -304,7 +341,17 @@ function CountdownDaOrari({ partenza, arrivo, destinazione }) {
   const a = Date.parse(arrivo)
   if (isNaN(p)) return null
   const partito = adesso > p + 120000
-  return <Countdown partenzaTs={p} partito={partito} arrivoTs={isNaN(a) ? null : a} nomeArrivo={destinazione} />
+  return (
+    <Countdown
+      partenzaTs={p}
+      partenzaProgTs={p}
+      partito={partito}
+      arrivoTs={isNaN(a) ? null : a}
+      arrivoProgTs={isNaN(a) ? null : a}
+      nomeArrivo={destinazione}
+      inTempoReale={false}
+    />
+  )
 }
 
 // Box di stato: dice a colpo d'occhio dov'è il treno (ultimo rilevamento
@@ -393,6 +440,7 @@ export default function TrattaTreno({
   compatta = false,
   conCountdown = false, // countdown partenza/arrivo (solo nei preferiti)
   codice, // ricerca per numero: codice stazione del treno scelto tra gli omonimi
+  inPausa = false, // scheda non visibile: sospendo gli aggiornamenti
 }) {
   const [stato, setStato] = useState(null)
   const [caricamento, setCaricamento] = useState(true)
@@ -402,10 +450,17 @@ export default function TrattaTreno({
   // il treno in tempo reale e l'arrivo viene rilevato senza riaprire l'app
   const [giro, setGiro] = useState(0)
   useEffect(() => {
-    if (!compatta || futura) return
+    if (!compatta || futura || inPausa) return
     const t = setInterval(() => setGiro((g) => g + 1), 60000)
     return () => clearInterval(t)
-  }, [compatta, futura])
+  }, [compatta, futura, inPausa])
+
+  // quando la scheda torna visibile aggiorno subito, senza aspettare il minuto
+  const eraInPausa = useRef(inPausa)
+  useEffect(() => {
+    if (eraInPausa.current && !inPausa) setGiro((g) => g + 1)
+    eraInPausa.current = inPausa
+  }, [inPausa])
 
   useEffect(() => {
     let vivo = true

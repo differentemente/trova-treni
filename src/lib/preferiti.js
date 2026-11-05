@@ -54,23 +54,33 @@ function giornoDa(iso) {
 }
 
 // Verifica se un preferito è "scaduto" (treno del giorno ormai arrivato).
+// Usa l'orario di arrivo COMPLETO di data quando c'è (LeFrecce lo fornisce):
+// così un treno che arriva dopo mezzanotte non viene cancellato appena salvato.
 function scaduto(p) {
-  // se non ho l'orario di arrivo non posso decidere: lo tengo
   if (!p.orarioArrivo) return false
+  let arrivoTs = null
 
-  // ricostruisco il datetime di arrivo combinando il giorno salvato con
-  // l'orario di arrivo (che può essere ISO completo o solo "HH:MM")
-  const arrivoMin = minutiOrario(p.orarioArrivo)
-  if (arrivoMin == null) return false
+  if (/^\d{4}-\d{2}-\d{2}T/.test(String(p.orarioArrivo))) {
+    const t = Date.parse(p.orarioArrivo)
+    if (!isNaN(t)) arrivoTs = t
+  }
 
-  const [yy, mm, gg] = (p.giorno || '').split('-').map(Number)
-  if (!yy || !mm || !gg) return false
+  if (arrivoTs == null) {
+    // riserva: solo "HH:MM" + giorno salvato
+    const arrivoMin = minutiOrario(p.orarioArrivo)
+    if (arrivoMin == null) return false
+    const [yy, mm, gg] = (p.giorno || '').split('-').map(Number)
+    if (!yy || !mm || !gg) return false
+    const d = new Date(yy, mm - 1, gg, 0, 0, 0)
+    d.setMinutes(arrivoMin)
+    // arrivo "prima" della partenza = arrivo il giorno dopo
+    const partenzaMin = minutiOrario(p.partenza || p.orarioPartenza)
+    if (partenzaMin != null && arrivoMin < partenzaMin) d.setDate(d.getDate() + 1)
+    arrivoTs = d.getTime()
+  }
 
-  const arrivo = new Date(yy, mm - 1, gg, 0, 0, 0)
   const ritardoNoto = Math.max(0, Number(p.ritardoNoto) || 0)
-  arrivo.setMinutes(arrivo.getMinutes() + arrivoMin + ritardoNoto + MARGINE_ARRIVO_MIN)
-
-  return Date.now() > arrivo.getTime()
+  return Date.now() > arrivoTs + (ritardoNoto + MARGINE_ARRIVO_MIN) * 60000
 }
 
 function minutiOrario(v) {

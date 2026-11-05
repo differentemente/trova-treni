@@ -224,7 +224,7 @@ function componiRisposta(d, origine, destinazione, futura = false) {
       pick(f.binarioProgrammatoPartenzaDescrizione) ||
       pick(f.binarioProgrammatoArrivoDescrizione)
     return {
-      nome: f.stazione,
+      nome: pulisciNome(f.stazione),
       teoricoArrivo: f.arrivo_teorico ?? null,
       effettivoArrivo: futura ? null : f.arrivoReale ?? null,
       teoricoPartenza: f.partenza_teorica ?? null,
@@ -274,7 +274,7 @@ function componiRisposta(d, origine, destinazione, futura = false) {
     if (d.oraUltimoRilevamento != null && pick(d.stazioneUltimoRilevamento)) {
       const iG = fermateComplete.findIndex((f) => simili(f.nome, d.stazioneUltimoRilevamento))
       daGlobale = {
-        nome: d.stazioneUltimoRilevamento,
+        nome: pulisciNome(d.stazioneUltimoRilevamento),
         ora: Number(d.oraUltimoRilevamento),
         ritardo: typeof d.ritardo === 'number' ? d.ritardo : daFermate?.ritardo ?? 0,
         indice: Math.max(iG, daFermate?.indice ?? -1),
@@ -410,8 +410,8 @@ function componiRisposta(d, origine, destinazione, futura = false) {
     fermate,
     // tratta intera (per il pop-up "percorso completo")
     fermateComplete,
-    origineTreno: d.origine,
-    destinazioneTreno: d.destinazione,
+    origineTreno: pulisciNome(d.origine),
+    destinazioneTreno: pulisciNome(d.destinazione),
     // es. "FR 9718" (serve alla ricerca per numero)
     nomeTreno:
       pick(d.compNumeroTreno) ||
@@ -434,7 +434,7 @@ function parseAutocomplete(text) {
     if (parts.length < 3) continue
     const codice = parts[1]
     const ts = parts[2]
-    const nome = (label.split(' - ')[1] || '').trim()
+    const nome = pulisciNome(label.split(' - ')[1] || '')
     out.push({ nome, codice, ts })
   }
   return out
@@ -468,6 +468,16 @@ function simili(a, b) {
   if (ia && ib && (ia === ib)) return true
   // una contenuta nell'altra dopo aver tolto puntini/spazi
   return na.includes(nb) || nb.includes(na)
+}
+
+// ViaggiaTreno scrive gli accenti con l'apice inverso ("DOLCE`" = Dolcè)
+const ACCENTI = { A: 'À', E: 'È', I: 'Ì', O: 'Ò', U: 'Ù', a: 'à', e: 'è', i: 'ì', o: 'ò', u: 'ù' }
+function pulisciNome(s) {
+  if (s == null) return s
+  return String(s)
+    .replace(/([AEIOUaeiou])`/g, (_, v) => ACCENTI[v])
+    .replace(/`/g, "'")
+    .trim()
 }
 
 function norm(s) {

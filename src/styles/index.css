@@ -80,3 +80,244 @@ body {
   .text-red-800 { color: #fecaca; }
   .text-red-700, .text-red-600 { color: #f87171; }
 }
+
+/* ==========================================================================
+   BARRA DELLE SCHEDE (stile iOS)
+   Traslucida, con l'icona attiva nel verde dell'app. Scorrendo verso il
+   basso scivola fuori dallo schermo, scorrendo verso l'alto rientra.
+   ========================================================================== */
+.barra-tab {
+  position: fixed;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 40;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  background-color: rgba(250, 247, 240, 0.86);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+  border-top: 0.5px solid rgba(0, 51, 26, 0.16);
+  transform: translateY(0);
+  transition: transform 0.32s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.barra-tab-nascosta {
+  transform: translateY(100%);
+}
+.barra-tab-voce {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  padding: 6px 2px 5px;
+  color: #8a8f8c;
+  -webkit-tap-highlight-color: transparent;
+  transition: color 0.15s ease, transform 0.15s ease;
+}
+.barra-tab-voce:active {
+  transform: scale(0.92);
+}
+.barra-tab-attiva {
+  color: #006633;
+}
+.barra-tab-etichetta {
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+.barra-tab-badge {
+  position: absolute;
+  top: -3px;
+  right: -9px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #e5484d;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 17px;
+  text-align: center;
+}
+
+/* ==========================================================================
+   TRANSIZIONI TRA LE SCHERMATE (stile navigazione iOS)
+   Avanti: la nuova arriva da destra, la vecchia arretra verso sinistra.
+   Indietro: il contrario. Disattivate se il telefono chiede meno animazioni.
+   ========================================================================== */
+.contenitore-viste {
+  position: relative;
+  overflow-x: clip;
+}
+.vista-nascosta {
+  display: none;
+}
+.vista-entra-avanti,
+.vista-entra-indietro,
+.vista-esce-avanti,
+.vista-esce-indietro {
+  background-color: #faf7f0;
+  will-change: transform;
+}
+.vista-esce-avanti,
+.vista-esce-indietro {
+  position: absolute;
+  inset-inline: 0;
+  pointer-events: none;
+}
+.vista-entra-avanti {
+  position: relative;
+  z-index: 2;
+  box-shadow: -14px 0 24px -18px rgba(0, 0, 0, 0.35);
+  animation: entra-da-destra 0.38s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+.vista-esce-avanti {
+  z-index: 1;
+  animation: esce-a-sinistra 0.38s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+.vista-entra-indietro {
+  position: relative;
+  z-index: 1;
+  animation: entra-da-sinistra 0.38s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+.vista-esce-indietro {
+  z-index: 2;
+  box-shadow: -14px 0 24px -18px rgba(0, 0, 0, 0.35);
+  animation: esce-a-destra 0.38s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+@keyframes entra-da-destra {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+@keyframes esce-a-sinistra {
+  from { transform: translateX(0); opacity: 1; }
+  to { transform: translateX(-30%); opacity: 0.55; }
+}
+@keyframes entra-da-sinistra {
+  from { transform: translateX(-30%); opacity: 0.55; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@keyframes esce-a-destra {
+  from { transform: translateX(0); }
+  to { transform: translateX(100%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .vista-entra-avanti, .vista-entra-indietro, .vista-esce-avanti, .vista-esce-indietro { animation: none; }
+  .vista-esce-avanti, .vista-esce-indietro { display: none; }
+  .barra-tab { transition: none; }
+}
+
+/* banner del primo utilizzo: entra con una leggera discesa */
+.banner-cuore {
+  animation: banner-entra 0.45s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+@keyframes banner-entra {
+  from { transform: translateY(-8px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+/* ==========================================================================
+   TABELLONE PARTENZE
+   Ricalca i monitor di stazione a LED: carattere a punti, righe alternate
+   nel verde dell'app e nel bianco.
+   ========================================================================== */
+.tabellone {
+  border-radius: 14px;
+  overflow: hidden;
+  border: 2px solid #00331a;
+  background: #00331a;
+  font-family: 'Doto', ui-monospace, 'SF Mono', Menlo, monospace;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.tabellone-griglia {
+  display: grid;
+  grid-template-columns: 3.4rem 3.9rem minmax(0, 1fr) 2.4rem;
+  column-gap: 0.5rem;
+  align-items: center;
+  padding: 0.55rem 0.7rem;
+}
+.tabellone-testata {
+  background: #00331a;
+  color: #cfe8d9;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding-top: 0.45rem;
+  padding-bottom: 0.45rem;
+}
+.tabellone-riga {
+  width: 100%;
+  text-align: left;
+  -webkit-tap-highlight-color: transparent;
+}
+.tabellone-riga:active {
+  filter: brightness(0.94);
+}
+.tabellone-riga-verde {
+  background: #006633;
+  color: #ffffff;
+}
+.tabellone-riga-bianca {
+  background: #ffffff;
+  color: #00331a;
+}
+.tabellone-ora {
+  font-size: clamp(17px, 4.8vw, 21px);
+  line-height: 1.05;
+}
+.tabellone-ritardo {
+  font-size: 11px;
+  line-height: 1.2;
+}
+.tabellone-sigla {
+  font-size: 11px;
+  line-height: 1.1;
+  opacity: 0.85;
+}
+.tabellone-numero {
+  font-size: clamp(14px, 3.9vw, 17px);
+  line-height: 1.15;
+}
+.tabellone-destinazione {
+  font-size: clamp(14px, 4vw, 18px);
+  line-height: 1.15;
+  text-transform: uppercase;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tabellone-binario {
+  font-size: clamp(18px, 5.2vw, 23px);
+  text-align: center;
+  line-height: 1;
+}
+.tabellone-cancellato .tabellone-destinazione,
+.tabellone-cancellato .tabellone-ora {
+  text-decoration: line-through;
+  opacity: 0.75;
+}
+.tabellone-lampeggia {
+  animation: tabellone-lampeggio 1.1s steps(2, start) infinite;
+}
+@keyframes tabellone-lampeggio {
+  to { visibility: hidden; }
+}
+
+@media (prefers-color-scheme: dark) {
+  .barra-tab {
+    background-color: rgba(18, 26, 22, 0.86);
+    border-top-color: rgba(255, 255, 255, 0.12);
+  }
+  .barra-tab-voce { color: #7f8783; }
+  .barra-tab-attiva { color: #8fd1ac; }
+  .vista-entra-avanti, .vista-entra-indietro, .vista-esce-avanti, .vista-esce-indietro {
+    background-color: #0e1411;
+  }
+  /* sul fondo scuro il bianco del tabellone si ammorbidisce leggermente */
+  .tabellone { border-color: #0b2a19; }
+  .tabellone-riga-bianca { background: #eef4ef; color: #00331a; }
+}
