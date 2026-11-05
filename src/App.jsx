@@ -7,6 +7,7 @@ import VistaNumeroTreno from './components/VistaNumeroTreno'
 import VistaTabellone from './components/VistaTabellone'
 import VistaSuggerimenti from './components/VistaSuggerimenti'
 import BottoneCaffe from './components/BottoneCaffe'
+import BannerInstalla from './components/BannerInstalla'
 import { IconaCuore, LogoApp } from './components/Icone'
 import { cercaViaggio, cercaItalo } from './lib/api'
 import { leggiPreferiti } from './lib/preferiti'
@@ -278,6 +279,7 @@ export default function App() {
       </div>
 
       <TabBar vista={vista} onCambia={vai} numPreferiti={numPreferiti} visibile={barraVisibile} />
+      <BannerInstalla />
     </div>
   )
 }

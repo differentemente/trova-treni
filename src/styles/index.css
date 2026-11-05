@@ -383,3 +383,42 @@ body {
   .tabellone { border-color: #0b2a19; }
   .tabellone-riga-bianca { background: #eef4ef; color: #00331a; }
 }
+
+/* ==========================================================================
+   BANNER "INSTALLA L'APP" (prima apertura da browser)
+   Foglio che sale dal basso, come i fogli di iOS.
+   ========================================================================== */
+.installa-sfondo {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(0, 20, 10, 0.38);
+  animation: installa-sfondo 0.3s ease both;
+}
+.installa-foglio {
+  width: 100%;
+  max-width: 36rem;
+  max-height: 88vh;
+  overflow-y: auto;
+  background: #ffffff;
+  border-radius: 22px 22px 0 0;
+  padding: 0.6rem 1.25rem calc(env(safe-area-inset-bottom, 0px) + 1.1rem);
+  box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.18);
+  animation: installa-sale 0.42s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+@keyframes installa-sfondo {
+  from { opacity: 0; }
+}
+@keyframes installa-sale {
+  from { transform: translateY(100%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .installa-sfondo, .installa-foglio { animation: none; }
+}
+@media (prefers-color-scheme: dark) {
+  .installa-sfondo { background: rgba(0, 0, 0, 0.55); }
+  .installa-foglio { background: #16201b; }
+}
