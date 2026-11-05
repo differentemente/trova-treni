@@ -7,7 +7,7 @@ import VistaNumeroTreno from './components/VistaNumeroTreno'
 import VistaTabellone from './components/VistaTabellone'
 import VistaSuggerimenti from './components/VistaSuggerimenti'
 import BottoneCaffe from './components/BottoneCaffe'
-import { IconaCuore } from './components/Icone'
+import { IconaCuore, LogoApp } from './components/Icone'
 import { cercaViaggio, cercaItalo } from './lib/api'
 import { leggiPreferiti } from './lib/preferiti'
 
@@ -245,17 +245,7 @@ export default function App() {
         <div className="absolute left-0 top-0">
           <BottoneCaffe />
         </div>
-        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-araldico-700 shadow-sm">
-          <svg viewBox="0 0 24 24" className="h-9 w-9" fill="none" stroke="#faf7f0" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="5" y="3" width="14" height="13" rx="3" />
-            <path d="M5 10h14" />
-            <circle cx="9" cy="7" r="0.8" fill="#faf7f0" stroke="none" />
-            <circle cx="15" cy="7" r="0.8" fill="#faf7f0" stroke="none" />
-            <path d="M8 16l-2 4M16 16l2 4" />
-            <circle cx="8.5" cy="13" r="0.6" fill="#faf7f0" stroke="none" />
-            <circle cx="15.5" cy="13" r="0.6" fill="#faf7f0" stroke="none" />
-          </svg>
-        </div>
+        <LogoApp className="h-14 w-14 shadow-sm rounded-[14px]" />
         <div>
           <h1 className="font-display text-3xl font-bold text-araldico-800">Trova Treni</h1>
           <p className="text-sm text-araldico-700">Un&rsquo;app di Nicola Perozeni</p>

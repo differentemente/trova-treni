@@ -87,3 +87,27 @@ export function IconaSveglia({ attiva, className = 'h-5 w-5' }) {
     </svg>
   )
 }
+
+// Logo dell'app (stesso disegno dell'icona sulla schermata Home):
+// trenino crema che sorride su verde sfumato
+export function LogoApp({ className = 'h-14 w-14' }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} role="img" aria-label="Trova Treni">
+      <defs>
+        <linearGradient id="logo-verde" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#1a8a52" />
+          <stop offset="1" stopColor="#004d26" />
+        </linearGradient>
+      </defs>
+      <rect width="24" height="24" rx="5.4" fill="url(#logo-verde)" />
+      <g transform="translate(12 12) scale(0.98) translate(-12 -12)">
+        <rect x="5.5" y="2.75" width="13" height="14.5" rx="3.5" fill="#faf7f0" />
+        <rect x="7.9" y="5.9" width="8.2" height="4.6" rx="1.4" fill="#006633" />
+        <circle cx="8.15" cy="12.9" r=".85" fill="#006633" />
+        <circle cx="15.85" cy="12.9" r=".85" fill="#006633" />
+        <path d="M10.2 13.9q1.8 1.75 3.6 0" fill="none" stroke="#006633" strokeWidth="1.4" strokeLinecap="round" />
+        <path d="M8.5 17.25 6.5 21.25M15.5 17.25l2 4M7.5 19.5h9" fill="none" stroke="#faf7f0" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+      </g>
+    </svg>
+  )
+}

@@ -5,7 +5,7 @@ import { useState } from 'react'
 // Netlify e arrivano per email se attivata la notifica del modulo.
 
 // aggiornata a ogni pacchetto: serve a verificare che il nuovo deploy sia online
-export const VERSIONE = '5 nov 2026 · 5'
+export const VERSIONE = '5 nov 2026 · 6'
 
 const TIPI = [
   { id: 'suggerimento', etichetta: 'Suggerimento' },
