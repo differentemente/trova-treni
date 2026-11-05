@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { CampoStazione } from './SearchForm'
-import { partenzeStazione, stazioneVicina } from '../lib/api'
+import { partenzeStazione, stazioneVicina, statoTreno } from '../lib/api'
+import { aggiungiPreferito, isPreferito, rimuoviPreferito } from '../lib/preferiti'
+import { IconaCuore } from './Icone'
 
 // Tabellone partenze della stazione, nello stile dei monitor a LED di
-// stazione: righe alternate verde/bianco, carattere a punti, orologio.
+// stazione: righe alternate verde/bianco, orologio. Il cuore accanto al
+// binario salva il treno in «Il mio treno».
 // All'apertura propone la stazione più vicina (GPS); toccando il campo se ne
 // sceglie un'altra. Toccando un treno se ne apre il percorso completo.
 
@@ -21,12 +24,83 @@ function useOrologio() {
   return t
 }
 
-function RigaTreno({ treno, pari, onApri }) {
-  const ritardo = treno.ritardo > 0 ? treno.ritardo : 0
+// ISO locale "YYYY-MM-DDTHH:MM:00", lo stesso formato dei preferiti salvati dalla ricerca
+function isoLocale(ts) {
+  const d = new Date(Number(ts))
+  const p = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:00`
+}
+
+// "VENEZIA S. LUCIA" -> "Venezia S. Lucia"
+function nomeLeggibile(s) {
+  return String(s || '')
+    .toLowerCase()
+    .replace(/(^|[\s.'(-])(\p{L})/gu, (_, a, b) => a + b.toUpperCase())
+}
+
+function datiPreferito(treno, stazione) {
+  return {
+    numero: treno.numero,
+    categoria: treno.categoria,
+    da: stazione.name,
+    a: nomeLeggibile(treno.destinazione),
+    partenza: isoLocale(treno.orario),
+  }
+}
+
+// Cuore del tabellone: salva il treno da questa stazione fino al capolinea.
+// L'orario di arrivo (serve per togliere il treno da solo all'arrivo) lo
+// chiedo a ViaggiaTreno al momento del tocco.
+function CuoreTabellone({ treno, stazione, onCambio }) {
+  const base = datiPreferito(treno, stazione)
+  const [, aggiorna] = useState(0)
+  const [attesa, setAttesa] = useState(false)
+  const attivo = isPreferito(base)
+
+  async function tocca(e) {
+    e.stopPropagation()
+    if (attesa) return
+    if (attivo) {
+      onCambio?.(rimuoviPreferito(base).length)
+      aggiorna((n) => n + 1)
+      return
+    }
+    setAttesa(true)
+    let arrivo = null
+    try {
+      const st = await statoTreno({ numero: treno.numero, codice: treno.codOrigine, origine: base.da, destinazione: treno.destinazione })
+      const ultima = st?.fermate?.[st.fermate.length - 1]
+      if (ultima?.teoricoArrivo) arrivo = Number(ultima.teoricoArrivo)
+    } catch {
+      // uso una stima
+    }
+    // riserva: se non conosco l'arrivo lo considero 3 ore dopo la partenza
+    const orarioArrivo = isoLocale(arrivo && arrivo > treno.orario ? arrivo : treno.orario + 3 * 3600e3)
+    onCambio?.(aggiungiPreferito({ ...base, orarioArrivo }).length)
+    setAttesa(false)
+  }
+
   return (
     <button
       type="button"
+      onClick={tocca}
+      aria-label={attivo ? 'Rimuovi da Il mio treno' : 'Aggiungi a Il mio treno'}
+      aria-pressed={attivo}
+      className={`tabellone-cuore ${attivo ? 'tabellone-cuore-attivo' : ''} ${attesa ? 'opacity-50' : ''}`}
+    >
+      <IconaCuore attiva={attivo} className="h-[17px] w-[17px]" />
+    </button>
+  )
+}
+
+function RigaTreno({ treno, pari, stazione, onApri, onCambioPreferiti }) {
+  const ritardo = treno.ritardo > 0 ? treno.ritardo : 0
+  return (
+    <div
+      role="button"
+      tabIndex={0}
       onClick={() => onApri(treno)}
+      onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onApri(treno)}
       className={`tabellone-riga tabellone-griglia ${pari ? 'tabellone-riga-verde' : 'tabellone-riga-bianca'} ${
         treno.cancellato ? 'tabellone-cancellato' : ''
       }`}
@@ -42,19 +116,23 @@ function RigaTreno({ treno, pari, onApri }) {
           ritardo > 0 && <span className="tabellone-ritardo block">+{ritardo}&prime;</span>
         )}
       </span>
-      <span className="min-w-0">
-        <span className="tabellone-sigla block">{treno.categoria || 'TRENO'}</span>
-        <span className="tabellone-numero block">{treno.numero}</span>
+      <span className="tabellone-treno">
+        <span className="tabellone-sigla">{treno.categoria || 'TRENO'}</span> {treno.numero}
       </span>
       <span className="tabellone-destinazione">{treno.destinazione}</span>
-      <span className={`tabellone-binario ${treno.binario && !treno.binarioConfermato ? 'opacity-70' : ''}`}>
+      {treno.cancellato ? (
+        <span />
+      ) : (
+        <CuoreTabellone treno={treno} stazione={stazione} onCambio={onCambioPreferiti} />
+      )}
+      <span className={`tabellone-binario ${String(treno.binario || '').length > 2 ? 'tabellone-binario-lungo' : ''} ${treno.binario && !treno.binarioConfermato ? 'opacity-70' : ''}`}>
         {treno.binario || '–'}
       </span>
-    </button>
+    </div>
   )
 }
 
-export default function VistaTabellone({ attiva = true, onApriTreno }) {
+export default function VistaTabellone({ attiva = true, onApriTreno, onCambioPreferiti }) {
   const [stazione, setStazione] = useState(null) // { id, name }
   const [gps, setGps] = useState('idle') // idle | cercando | ok | errore
   const [dati, setDati] = useState(null)
@@ -136,17 +214,18 @@ export default function VistaTabellone({ attiva = true, onApriTreno }) {
 
       {stazione && (
         <div className="tabellone">
-          <div className="tabellone-griglia" style={{ gridTemplateColumns: 'minmax(0,1fr) auto', paddingTop: '0.7rem', paddingBottom: '0.6rem' }}>
+          <div className="tabellone-griglia" style={{ gridTemplateColumns: 'minmax(0,1fr) auto', paddingTop: '0.6rem', paddingBottom: '0.5rem' }}>
             <span className="min-w-0">
-              <span className="block text-[11px] tracking-widest text-[#cfe8d9]">PARTENZE</span>
-              <span className="block truncate text-lg uppercase leading-tight text-white">{stazione.name}</span>
+              <span className="block text-[9px] font-semibold tracking-widest text-[#cfe8d9]">PARTENZE</span>
+              <span className="block truncate text-[13px] font-bold uppercase leading-tight text-white">{stazione.name}</span>
             </span>
-            <span className="text-2xl text-white">{hhmm(adesso)}</span>
+            <span className="text-[15px] font-bold text-white">{hhmm(adesso)}</span>
           </div>
           <div className="tabellone-griglia tabellone-testata">
             <span>Ora</span>
             <span>Treno</span>
             <span>Destinazione</span>
+            <span />
             <span className="text-center">Bin.</span>
           </div>
 
@@ -161,6 +240,8 @@ export default function VistaTabellone({ attiva = true, onApriTreno }) {
               key={`${t.numero}-${t.orario}`}
               treno={t}
               pari={i % 2 === 0}
+              stazione={stazione}
+              onCambioPreferiti={onCambioPreferiti}
               onApri={(tr) => onApriTreno?.({ numero: tr.numero, codice: tr.codOrigine, origine: tr.origine })}
             />
           ))}

@@ -4,6 +4,9 @@ import { useState } from 'react'
 // (modulo "suggerimenti" dichiarato in index.html). Si leggono nel pannello
 // Netlify e arrivano per email se attivata la notifica del modulo.
 
+// aggiornata a ogni pacchetto: serve a verificare che il nuovo deploy sia online
+export const VERSIONE = '5 nov 2026 · 4'
+
 const TIPI = [
   { id: 'suggerimento', etichetta: 'Suggerimento' },
   { id: 'problema', etichetta: 'Problema / bug' },
@@ -143,6 +146,7 @@ export default function VistaSuggerimenti() {
           {stato === 'invio' ? 'Invio in corso…' : 'Invia'}
         </button>
       </form>
+      <p className="px-1 text-center text-xs text-araldico-500">Versione {VERSIONE}</p>
     </div>
   )
 }

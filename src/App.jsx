@@ -185,7 +185,7 @@ export default function App() {
     setVista(nuova)
     if (nuova === 'mio') setNumPreferiti(leggiPreferiti().length) // aggiorna e pulisce
     clearTimeout(timerUscita.current)
-    timerUscita.current = setTimeout(() => setUscente(null), senzaAnimazioni() ? 0 : 400)
+    timerUscita.current = setTimeout(() => setUscente(null), senzaAnimazioni() ? 0 : 450)
   }
 
   // dopo il cambio di scheda ripristino lo scroll della schermata che entra
@@ -225,7 +225,7 @@ export default function App() {
       )
     if (id === 'mio') return <VistaPreferiti onCambio={setNumPreferiti} attiva={attiva} />
     if (id === 'numero') return <VistaNumeroTreno richiesta={richiestaTreno} attiva={attiva} />
-    if (id === 'tabellone') return <VistaTabellone attiva={attiva} onApriTreno={apriTrenoDaTabellone} />
+    if (id === 'tabellone') return <VistaTabellone attiva={attiva} onApriTreno={apriTrenoDaTabellone} onCambioPreferiti={setNumPreferiti} />
     if (id === 'suggerimenti') return <VistaSuggerimenti />
     return null
   }
@@ -278,6 +278,8 @@ export default function App() {
               className={classe}
               style={esce ? { top: uscente.top } : undefined}
               aria-hidden={!corrente}
+              // tolgo la schermata uscente appena finisce la sua animazione
+              onAnimationEnd={esce ? (e) => e.target === e.currentTarget && setUscente(null) : undefined}
             >
               {renderVista(id)}
             </section>

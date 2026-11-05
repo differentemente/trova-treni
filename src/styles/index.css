@@ -4,6 +4,10 @@
 
 body {
   @apply bg-crema text-araldico-900 antialiased;
+  /* la pagina è sempre un filo più alta dello schermo: su iPhone, con pagine
+     corte che non scorrono, la barra in basso resterebbe sollevata */
+  min-height: calc(100vh + 1px);
+  min-height: calc(100lvh + 1px);
 }
 
 /* ==========================================================================
@@ -99,8 +103,18 @@ body {
   transform: translateY(0);
   transition: transform 0.32s cubic-bezier(0.32, 0.72, 0, 1);
 }
+/* prolunga lo sfondo della barra sotto il bordo dello schermo (nessuna fessura) */
+.barra-tab::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: 60px;
+  background: inherit;
+}
 .barra-tab-nascosta {
-  transform: translateY(100%);
+  transform: translateY(calc(100% + 60px));
 }
 .barra-tab-voce {
   display: flex;
@@ -149,7 +163,10 @@ body {
    ========================================================================== */
 .contenitore-viste {
   position: relative;
-  overflow-x: clip;
+  /* taglia la schermata che esce dove finisce quella che entra:
+     niente "fantasma" della pagina precedente sotto quella nuova */
+  overflow: hidden;
+  overflow: clip;
 }
 .vista-nascosta {
   display: none;
@@ -193,7 +210,7 @@ body {
 }
 @keyframes esce-a-sinistra {
   from { transform: translateX(0); opacity: 1; }
-  to { transform: translateX(-30%); opacity: 0.55; }
+  to { transform: translateX(-30%); opacity: 0; }
 }
 @keyframes entra-da-sinistra {
   from { transform: translateX(-30%); opacity: 0.55; }
@@ -220,38 +237,42 @@ body {
 
 /* ==========================================================================
    TABELLONE PARTENZE
-   Ricalca i monitor di stazione a LED: carattere a punti, righe alternate
-   nel verde dell'app e nel bianco.
+   Ricalca i monitor di stazione: righe alternate nel verde dell'app e nel
+   bianco, carattere di sistema (SF Pro su iPhone) per la massima leggibilità.
    ========================================================================== */
 .tabellone {
-  border-radius: 14px;
+  border-radius: 12px;
   overflow: hidden;
-  border: 2px solid #00331a;
+  border: 1.5px solid #00331a;
   background: #00331a;
-  font-family: 'Doto', ui-monospace, 'SF Mono', Menlo, monospace;
-  font-weight: 800;
-  letter-spacing: 0.02em;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, system-ui, sans-serif;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
+  -webkit-text-size-adjust: 100%;
 }
 .tabellone-griglia {
   display: grid;
-  grid-template-columns: 3.4rem 3.9rem minmax(0, 1fr) 2.4rem;
-  column-gap: 0.5rem;
+  /* ora | treno | destinazione | cuore | binario */
+  grid-template-columns: 2.6rem 3.7rem minmax(0, 1fr) 1.5rem 1.7rem;
+  column-gap: 0.4rem;
   align-items: center;
-  padding: 0.55rem 0.7rem;
+  padding: 0.42rem 0.65rem;
 }
 .tabellone-testata {
   background: #00331a;
   color: #cfe8d9;
-  font-size: 11px;
-  letter-spacing: 0.08em;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  padding-top: 0.45rem;
-  padding-bottom: 0.45rem;
+  padding-top: 0.35rem;
+  padding-bottom: 0.35rem;
 }
 .tabellone-riga {
   width: 100%;
+  min-height: 2.5rem; /* righe tutte uguali, con o senza ritardo */
   text-align: left;
+  cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
 .tabellone-riga:active {
@@ -266,34 +287,75 @@ body {
   color: #00331a;
 }
 .tabellone-ora {
-  font-size: clamp(17px, 4.8vw, 21px);
-  line-height: 1.05;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.15;
 }
 .tabellone-ritardo {
-  font-size: 11px;
+  font-size: 10px;
+  font-weight: 700;
   line-height: 1.2;
+  color: #f5c542;
+}
+.tabellone-riga-bianca .tabellone-ritardo {
+  color: #b45309;
+}
+.tabellone-treno {
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .tabellone-sigla {
-  font-size: 11px;
-  line-height: 1.1;
-  opacity: 0.85;
-}
-.tabellone-numero {
-  font-size: clamp(14px, 3.9vw, 17px);
-  line-height: 1.15;
+  font-size: 9.5px;
+  font-weight: 700;
+  opacity: 0.75;
 }
 .tabellone-destinazione {
-  font-size: clamp(14px, 4vw, 18px);
-  line-height: 1.15;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.2;
   text-transform: uppercase;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.tabellone-cuore {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 999px;
+  color: currentColor;
+  opacity: 0.75;
+  -webkit-tap-highlight-color: transparent;
+}
+.tabellone-cuore:active {
+  transform: scale(0.85);
+}
+.tabellone-cuore-attivo {
+  color: #ff5a5f;
+  opacity: 1;
+}
+.tabellone-riga-bianca .tabellone-cuore-attivo {
+  color: #dc2626;
+}
 .tabellone-binario {
-  font-size: clamp(18px, 5.2vw, 23px);
+  font-size: 14px;
+  font-weight: 700;
   text-align: center;
-  line-height: 1;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+}
+/* binari tipo "1 EST" o "10 OVEST": testo più piccolo su due righe */
+.tabellone-binario-lungo {
+  font-size: 9.5px;
+  white-space: normal;
+  line-height: 1.05;
+  word-break: break-word;
 }
 .tabellone-cancellato .tabellone-destinazione,
 .tabellone-cancellato .tabellone-ora {
