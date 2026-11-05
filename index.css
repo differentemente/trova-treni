@@ -1,0 +1,351 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-crema text-araldico-900 antialiased;
+  /* la pagina copre sempre tutto lo schermo: su iPhone, con pagine corte, la
+     barra in basso altrimenti può restare sollevata di qualche millimetro */
+  min-height: 100vh;
+  min-height: 100lvh;
+}
+
+/* ==========================================================================
+   TEMA SCURO
+   Si attiva SOLO se l'iPhone (o il dispositivo) è impostato in modalità
+   scura. In modalità chiara questo blocco viene ignorato e l'app resta
+   identica a prima. Rimappo i colori usati nei componenti su una tavolozza
+   notturna che mantiene il verde araldico come colore principale.
+   ========================================================================== */
+@media (prefers-color-scheme: dark) {
+  :root { color-scheme: dark; }
+
+  body { background-color: #0e1411; color: #e6efe9; }
+
+  /* superfici */
+  .bg-white { background-color: #16201b; }
+  .bg-crema { background-color: #0e1411; }
+  .bg-araldico-50 { background-color: #1b2a22; }
+  .bg-araldico-50\/50, .bg-araldico-50\/40 { background-color: rgba(27, 42, 34, 0.7); }
+  .bg-araldico-100 { background-color: #22382c; }
+  .bg-araldico-300 { background-color: #3f6a54; }
+  .bg-gray-100 { background-color: #232a27; }
+  .bg-gray-300 { background-color: #3a423e; }
+  .bg-black\/40 { background-color: rgba(0, 0, 0, 0.6); }
+  .hover\:bg-araldico-50:hover { background-color: #1f3127; }
+  .hover\:bg-araldico-100:hover { background-color: #27402f; }
+  .hover\:bg-gray-200:hover { background-color: #2d3531; }
+  /* pallino dell'interruttore "Solo treni diretti": resta chiaro */
+  .h-4.w-4.rounded-full.bg-white { background-color: #e6efe9; }
+
+  /* bordi */
+  .border-araldico-100 { border-color: #26372e; }
+  .border-araldico-200 { border-color: #2f463a; }
+  .border-araldico-300, .hover\:border-araldico-300:hover { border-color: #3f5a4b; }
+  .border-araldico-500, .focus\:border-araldico-500:focus { border-color: #4f9d74; }
+  .border-gray-200 { border-color: #2b3430; }
+  .ring-araldico-100 { --tw-ring-color: #22382c; }
+  .focus\:ring-araldico-500:focus { --tw-ring-color: #4f9d74; }
+
+  /* testi verdi: da scuri a chiari, per restare leggibili sul fondo scuro */
+  .text-araldico-900 { color: #eef5f0; }
+  .text-araldico-800 { color: #d4e6db; }
+  .text-araldico-700 { color: #8fd1ac; }
+  .text-araldico-600 { color: #7cc39c; }
+  .text-araldico-500 { color: #6aa987; }
+  .text-araldico-400 { color: #5b8f73; }
+  .text-araldico-300 { color: #4d7a62; }
+  .text-araldico-200 { color: #3b5c4a; }
+
+  /* grigi */
+  .text-gray-900 { color: #e5e7eb; }
+  .text-gray-600 { color: #b8bec6; }
+  .text-gray-500 { color: #9aa1a9; }
+  .text-gray-400 { color: #7d848c; }
+  .text-gray-300 { color: #5b6168; }
+
+  /* riquadri di stato: verde (in orario), ambra (ritardo), rosso (cancellato) */
+  .bg-green-50 { background-color: rgba(34, 197, 94, 0.1); }
+  .bg-green-100 { background-color: rgba(34, 197, 94, 0.18); }
+  .border-green-300 { border-color: rgba(74, 222, 128, 0.35); }
+  .text-green-900, .text-green-800 { color: #bbf7d0; }
+  .text-green-700 { color: #4ade80; }
+
+  .bg-amber-50 { background-color: rgba(245, 158, 11, 0.1); }
+  .bg-amber-100 { background-color: rgba(245, 158, 11, 0.18); }
+  .border-amber-300 { border-color: rgba(252, 211, 77, 0.35); }
+  .text-amber-900 { color: #fde68a; }
+  .text-amber-800 { color: #fcd34d; }
+  .text-amber-600 { color: #fbbf24; }
+
+  .bg-red-50 { background-color: rgba(239, 68, 68, 0.1); }
+  .bg-red-100, .hover\:bg-red-100:hover { background-color: rgba(239, 68, 68, 0.18); }
+  .border-red-200 { border-color: rgba(248, 113, 113, 0.35); }
+  .text-red-800 { color: #fecaca; }
+  .text-red-700, .text-red-600 { color: #f87171; }
+}
+
+/* ==========================================================================
+   BARRA DELLE SCHEDE (stile iOS)
+   Traslucida, con l'icona attiva nel verde dell'app. Scorrendo verso il
+   basso scivola fuori dallo schermo, scorrendo verso l'alto rientra.
+   ========================================================================== */
+.barra-tab {
+  position: fixed;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 40;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  background-color: rgba(250, 247, 240, 0.86);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+  border-top: 0.5px solid rgba(0, 51, 26, 0.16);
+  transform: translateY(0);
+  transition: transform 0.32s cubic-bezier(0.32, 0.72, 0, 1);
+}
+/* prolunga lo sfondo della barra sotto il bordo dello schermo (nessuna fessura) */
+.barra-tab::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: 60px;
+  background: inherit;
+}
+.barra-tab-nascosta {
+  transform: translateY(calc(100% + 60px));
+}
+.barra-tab-voce {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  padding: 6px 2px 5px;
+  color: #8a8f8c;
+  -webkit-tap-highlight-color: transparent;
+  transition: color 0.15s ease, transform 0.15s ease;
+}
+.barra-tab-voce:active {
+  transform: scale(0.92);
+}
+.barra-tab-attiva {
+  color: #006633;
+}
+.barra-tab-etichetta {
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+.barra-tab-badge {
+  position: absolute;
+  top: -3px;
+  right: -9px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #e5484d;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 17px;
+  text-align: center;
+}
+
+/* ==========================================================================
+   TRANSIZIONI TRA LE SCHERMATE (stile navigazione iOS)
+   Avanti: la nuova arriva da destra, la vecchia arretra verso sinistra.
+   Indietro: il contrario. Disattivate se il telefono chiede meno animazioni.
+   ========================================================================== */
+.contenitore-viste {
+  position: relative;
+  /* taglia la schermata che esce dove finisce quella che entra:
+     niente "fantasma" della pagina precedente sotto quella nuova */
+  overflow: hidden;
+  overflow: clip;
+}
+.vista-nascosta {
+  display: none;
+}
+.vista-entra-avanti,
+.vista-entra-indietro,
+.vista-esce-avanti,
+.vista-esce-indietro {
+  background-color: #faf7f0;
+  will-change: transform;
+}
+.vista-esce-avanti,
+.vista-esce-indietro {
+  position: absolute;
+  inset-inline: 0;
+  pointer-events: none;
+}
+.vista-entra-avanti {
+  position: relative;
+  z-index: 2;
+  box-shadow: -14px 0 24px -18px rgba(0, 0, 0, 0.35);
+  animation: entra-da-destra 0.38s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+.vista-esce-avanti {
+  z-index: 1;
+  animation: esce-a-sinistra 0.38s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+.vista-entra-indietro {
+  position: relative;
+  z-index: 1;
+  animation: entra-da-sinistra 0.38s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+.vista-esce-indietro {
+  z-index: 2;
+  box-shadow: -14px 0 24px -18px rgba(0, 0, 0, 0.35);
+  animation: esce-a-destra 0.38s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+@keyframes entra-da-destra {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+@keyframes esce-a-sinistra {
+  from { transform: translateX(0); opacity: 1; }
+  to { transform: translateX(-30%); opacity: 0; }
+}
+@keyframes entra-da-sinistra {
+  from { transform: translateX(-30%); opacity: 0.55; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@keyframes esce-a-destra {
+  from { transform: translateX(0); }
+  to { transform: translateX(100%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .vista-entra-avanti, .vista-entra-indietro, .vista-esce-avanti, .vista-esce-indietro { animation: none; }
+  .vista-esce-avanti, .vista-esce-indietro { display: none; }
+  .barra-tab { transition: none; }
+}
+
+/* banner del primo utilizzo: entra con una leggera discesa */
+.banner-cuore {
+  animation: banner-entra 0.45s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+@keyframes banner-entra {
+  from { transform: translateY(-8px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+/* ==========================================================================
+   TABELLONE PARTENZE
+   Ricalca i monitor di stazione: righe alternate nel verde dell'app e nel
+   bianco, carattere di sistema (SF Pro su iPhone) per la massima leggibilità.
+   ========================================================================== */
+.tabellone {
+  border-radius: 14px;
+  overflow: hidden;
+  border: 2px solid #00331a;
+  background: #00331a;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, system-ui, sans-serif;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  font-variant-numeric: tabular-nums;
+}
+.tabellone-griglia {
+  display: grid;
+  grid-template-columns: 2.9rem 3.3rem minmax(0, 1fr) 2.1rem;
+  column-gap: 0.5rem;
+  align-items: center;
+  padding: 0.5rem 0.75rem;
+}
+.tabellone-testata {
+  background: #00331a;
+  color: #cfe8d9;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding-top: 0.45rem;
+  padding-bottom: 0.45rem;
+}
+.tabellone-riga {
+  width: 100%;
+  text-align: left;
+  -webkit-tap-highlight-color: transparent;
+}
+.tabellone-riga:active {
+  filter: brightness(0.94);
+}
+.tabellone-riga-verde {
+  background: #006633;
+  color: #ffffff;
+}
+.tabellone-riga-bianca {
+  background: #ffffff;
+  color: #00331a;
+}
+.tabellone-ora {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.15;
+}
+.tabellone-ritardo {
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: #f5b301;
+}
+.tabellone-riga-bianca .tabellone-ritardo {
+  color: #b45309;
+}
+.tabellone-sigla {
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.2;
+  opacity: 0.8;
+}
+.tabellone-numero {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+.tabellone-destinazione {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-transform: uppercase;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tabellone-binario {
+  font-size: 16px;
+  font-weight: 700;
+  text-align: center;
+  line-height: 1;
+}
+.tabellone-cancellato .tabellone-destinazione,
+.tabellone-cancellato .tabellone-ora {
+  text-decoration: line-through;
+  opacity: 0.75;
+}
+.tabellone-lampeggia {
+  animation: tabellone-lampeggio 1.1s steps(2, start) infinite;
+}
+@keyframes tabellone-lampeggio {
+  to { visibility: hidden; }
+}
+
+@media (prefers-color-scheme: dark) {
+  .barra-tab {
+    background-color: rgba(18, 26, 22, 0.86);
+    border-top-color: rgba(255, 255, 255, 0.12);
+  }
+  .barra-tab-voce { color: #7f8783; }
+  .barra-tab-attiva { color: #8fd1ac; }
+  .vista-entra-avanti, .vista-entra-indietro, .vista-esce-avanti, .vista-esce-indietro {
+    background-color: #0e1411;
+  }
+  /* sul fondo scuro il bianco del tabellone si ammorbidisce leggermente */
+  .tabellone { border-color: #0b2a19; }
+  .tabellone-riga-bianca { background: #eef4ef; color: #00331a; }
+}
