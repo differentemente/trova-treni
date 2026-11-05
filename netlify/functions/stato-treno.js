@@ -85,19 +85,8 @@ export async function handler(event) {
     let almenoUnoConDati = false
 
     for (const c of ordinati.slice(0, 8)) {
-      // provo prima con la data richiesta (per le future), poi con quella di oggi
-      const tentativi = []
-      if (tsGiornoRichiesto != null && tsGiornoRichiesto !== Number(c.ts)) {
-        tentativi.push(tsGiornoRichiesto)
-      }
-      tentativi.push(c.ts)
-
-      let d = null
-      for (const ts of tentativi) {
-        d = await scaricaAndamento(c.codice, numero, ts)
-        if (d) break
-      }
-      if (!d) continue // nessun tentativo ha dati per questo candidato
+      const d = await corsaGiusta(c, numero, partenzaISO, tsGiornoRichiesto, origine, futura)
+      if (!d) continue // nessuna corsa plausibile per questo candidato
       almenoUnoConDati = true
 
       const punteggio = valuta(d, origine, destinazione, minutiAttesi)
@@ -148,6 +137,94 @@ export async function handler(event) {
   } catch (e) {
     return json(200, { disponibile: false, motivo: 'errore di rete', errore: e.message })
   }
+}
+
+// ---- scelta della corsa del GIORNO giusto ----
+//
+// Lo stesso treno circola ogni giorno: ViaggiaTreno distingue le corse con il
+// timestamp della mezzanotte del giorno di partenza dal capolinea. L'autocomplete
+// a volte restituisce ancora la corsa di IERI (es. REG 33303 Milano 23:25 →
+// Brescia 00:33: alle 23:30 di oggi proponeva quella di ieri, già arrivata).
+// Qui verifico la data di ogni corsa e scelgo quella che serve davvero.
+
+const GIORNO_MS = 24 * 3600e3
+
+// "YYYY-MM-DD" del giorno italiano di un timestamp
+function dataRoma(ts) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit' }).format(
+    new Date(Number(ts))
+  )
+}
+
+// ms della mezzanotte italiana di un giorno "YYYY-MM-DD" (ora solare e legale)
+function mezzanotteRoma(giorno) {
+  const [y, m, g] = giorno.split('-').map(Number)
+  const utc = Date.UTC(y, m - 1, g)
+  // ora di Roma a mezzanotte UTC di quel giorno = scostamento del fuso
+  const h = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Rome', hour: '2-digit', hourCycle: 'h23' }).format(new Date(utc)))
+  return utc - h * 3600e3
+}
+
+// partenza programmata della corsa dal capolinea
+function partenzaCorsa(d) {
+  const ts = d?.fermate?.[0]?.partenza_teorica ?? d?.orarioPartenza
+  return ts != null && !isNaN(Number(ts)) ? Number(ts) : null
+}
+
+// partenza programmata dalla stazione dell'utente (o dal capolinea)
+function partenzaDaStazione(d, origine) {
+  const f = origine ? (d?.fermate || []).find((x) => simili(x.stazione, origine)) : null
+  const ts = f?.partenza_teorica ?? f?.arrivo_teorico
+  return ts != null ? Number(ts) : partenzaCorsa(d)
+}
+
+// la corsa è conclusa (arrivata al capolinea, o comunque da più di un'ora)
+function corsaConclusa(d, adesso) {
+  const f = d?.fermate?.[d.fermate.length - 1]
+  if (!f) return false
+  if (f.arrivoReale != null) return true
+  const prog = Number(f.arrivo_teorico)
+  return !isNaN(prog) && prog + (Number(d.ritardo) || 0) * 60000 + 3600e3 < adesso
+}
+
+async function corsaGiusta(c, numero, partenzaISO, tsRichiesto, origine, futura = false, adesso = Date.now()) {
+  const scaricati = new Map()
+  const scarica = async (ts) => {
+    const k = String(ts)
+    if (!scaricati.has(k)) scaricati.set(k, await scaricaAndamento(c.codice, numero, ts))
+    return scaricati.get(k)
+  }
+
+  // 1) l'utente indica l'orario di partenza (ricerca A→B, preferiti):
+  //    accetto solo una corsa che parte dalla sua stazione entro 12 ore da
+  //    quell'orario. Provo il giorno richiesto, il giorno prima (treni partiti
+  //    prima di mezzanotte) e quello proposto dall'autocomplete.
+  const attesa = partenzaISO ? Date.parse(partenzaISO) : NaN
+  if (!isNaN(attesa)) {
+    const giorno = partenzaISO.slice(0, 10)
+    const prove = [tsRichiesto ?? mezzanotteRoma(giorno), mezzanotteRoma(dataRoma(mezzanotteRoma(giorno) - GIORNO_MS / 2)), c.ts]
+    for (const ts of prove) {
+      const d = await scarica(ts)
+      const p = d && partenzaDaStazione(d, origine)
+      if (d && (p == null || Math.abs(p - attesa) < 12 * 3600e3)) return d
+    }
+    // data futura non ancora in linea: uso una corsa qualsiasi solo come
+    // modello degli orari programmati (la risposta è marcata "futura")
+    if (futura) for (const v of scaricati.values()) if (v) return v
+    return null
+  }
+
+  // 2) ricerca per numero (nessun orario): parto dalla corsa dell'autocomplete;
+  //    se è di un giorno precedente ed è già conclusa, passo a quella di oggi.
+  const oggi = dataRoma(adesso)
+  let d = await scarica(c.ts)
+  const giornoCorsa = d ? dataRoma(partenzaCorsa(d) ?? Number(c.ts)) : null
+  if (!d || (giornoCorsa < oggi && corsaConclusa(d, adesso))) {
+    const dOggi = await scarica(mezzanotteRoma(oggi))
+    if (dOggi && dataRoma(partenzaCorsa(dOggi) ?? adesso) === oggi) d = dOggi
+    else if (d && giornoCorsa < oggi) return null // la corsa di ieri è finita e quella di oggi non c'è ancora
+  }
+  return d
 }
 
 async function scaricaAndamento(codice, numero, ts) {
@@ -505,12 +582,9 @@ function minutiDaISO(iso) {
 // usa questo valore come identificativo di giornata nelle chiamate andamentoTreno.
 function mezzanotteMsDaISO(iso) {
   const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/)
-  if (!m) return null
-  const y = Number(m[1]), mo = Number(m[2]), g = Number(m[3])
-  if (!y || !mo || !g) return null
-  // mezzanotte in ora locale italiana (la stessa convenzione usata da ViaggiaTreno)
-  const d = new Date(y, mo - 1, g, 0, 0, 0, 0)
-  return isNaN(d) ? null : d.getTime()
+  if (!m || !Number(m[1]) || !Number(m[2]) || !Number(m[3])) return null
+  // mezzanotte in ora italiana (il server Netlify gira in UTC)
+  return mezzanotteRoma(`${m[1]}-${m[2]}-${m[3]}`)
 }
 
 // minuti dopo mezzanotte dell'orario di partenza teorico dalla prima fermata
