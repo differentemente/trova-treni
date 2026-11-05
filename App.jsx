@@ -225,7 +225,7 @@ export default function App() {
       )
     if (id === 'mio') return <VistaPreferiti onCambio={setNumPreferiti} attiva={attiva} />
     if (id === 'numero') return <VistaNumeroTreno richiesta={richiestaTreno} attiva={attiva} />
-    if (id === 'tabellone') return <VistaTabellone attiva={attiva} onApriTreno={apriTrenoDaTabellone} />
+    if (id === 'tabellone') return <VistaTabellone attiva={attiva} onApriTreno={apriTrenoDaTabellone} onCambioPreferiti={setNumPreferiti} />
     if (id === 'suggerimenti') return <VistaSuggerimenti />
     return null
   }

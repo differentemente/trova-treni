@@ -4,10 +4,10 @@
 
 body {
   @apply bg-crema text-araldico-900 antialiased;
-  /* la pagina copre sempre tutto lo schermo: su iPhone, con pagine corte, la
-     barra in basso altrimenti può restare sollevata di qualche millimetro */
-  min-height: 100vh;
-  min-height: 100lvh;
+  /* la pagina è sempre un filo più alta dello schermo: su iPhone, con pagine
+     corte che non scorrono, la barra in basso resterebbe sollevata */
+  min-height: calc(100vh + 1px);
+  min-height: calc(100lvh + 1px);
 }
 
 /* ==========================================================================
@@ -241,35 +241,38 @@ body {
    bianco, carattere di sistema (SF Pro su iPhone) per la massima leggibilità.
    ========================================================================== */
 .tabellone {
-  border-radius: 14px;
+  border-radius: 12px;
   overflow: hidden;
-  border: 2px solid #00331a;
+  border: 1.5px solid #00331a;
   background: #00331a;
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, system-ui, sans-serif;
   font-weight: 600;
-  letter-spacing: 0.01em;
   font-variant-numeric: tabular-nums;
+  -webkit-text-size-adjust: 100%;
 }
 .tabellone-griglia {
   display: grid;
-  grid-template-columns: 2.9rem 3.3rem minmax(0, 1fr) 2.1rem;
-  column-gap: 0.5rem;
+  /* ora | treno | destinazione | cuore | binario */
+  grid-template-columns: 2.6rem 3.7rem minmax(0, 1fr) 1.5rem 1.7rem;
+  column-gap: 0.4rem;
   align-items: center;
-  padding: 0.5rem 0.75rem;
+  padding: 0.42rem 0.65rem;
 }
 .tabellone-testata {
   background: #00331a;
   color: #cfe8d9;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  padding-top: 0.45rem;
-  padding-bottom: 0.45rem;
+  padding-top: 0.35rem;
+  padding-bottom: 0.35rem;
 }
 .tabellone-riga {
   width: 100%;
+  min-height: 2.5rem; /* righe tutte uguali, con o senza ritardo */
   text-align: left;
+  cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
 .tabellone-riga:active {
@@ -284,32 +287,33 @@ body {
   color: #00331a;
 }
 .tabellone-ora {
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 700;
   line-height: 1.15;
 }
 .tabellone-ritardo {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   line-height: 1.2;
-  color: #f5b301;
+  color: #f5c542;
 }
 .tabellone-riga-bianca .tabellone-ritardo {
   color: #b45309;
 }
-.tabellone-sigla {
-  font-size: 10px;
+.tabellone-treno {
+  font-size: 12px;
   font-weight: 600;
-  line-height: 1.2;
-  opacity: 0.8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.tabellone-numero {
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1.2;
+.tabellone-sigla {
+  font-size: 9.5px;
+  font-weight: 700;
+  opacity: 0.75;
 }
 .tabellone-destinazione {
-  font-size: 14px;
+  font-size: 12.5px;
   font-weight: 600;
   line-height: 1.2;
   text-transform: uppercase;
@@ -317,11 +321,41 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.tabellone-cuore {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 999px;
+  color: currentColor;
+  opacity: 0.75;
+  -webkit-tap-highlight-color: transparent;
+}
+.tabellone-cuore:active {
+  transform: scale(0.85);
+}
+.tabellone-cuore-attivo {
+  color: #ff5a5f;
+  opacity: 1;
+}
+.tabellone-riga-bianca .tabellone-cuore-attivo {
+  color: #dc2626;
+}
 .tabellone-binario {
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 700;
   text-align: center;
-  line-height: 1;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+}
+/* binari tipo "1 EST" o "10 OVEST": testo più piccolo su due righe */
+.tabellone-binario-lungo {
+  font-size: 9.5px;
+  white-space: normal;
+  line-height: 1.05;
+  word-break: break-word;
 }
 .tabellone-cancellato .tabellone-destinazione,
 .tabellone-cancellato .tabellone-ora {
